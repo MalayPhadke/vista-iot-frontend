@@ -4,86 +4,67 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel } from "@/components/ui/form"
+import { Form, FormField, FormItem, FormLabel, FormControl, FormDescription } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { toast } from "sonner"
+import { Switch } from "@/components/ui/switch"
 import { useConfigStore } from "@/lib/stores/configuration-store"
 import { useState } from "react"
 import { RefreshCw } from "lucide-react"
+import { toast } from "sonner"
 
 const wifiFormSchema = z.object({
   enabled: z.boolean(),
   mode: z.enum(["client", "ap"]),
-  ssid: z.string().min(1),
-  security: z.enum(["none", "wep", "wpa2", "wpa3"]),
-  password: z.string().optional(),
-  channel: z.string(),
-  band: z.enum(["2.4", "5"]),
-  hidden: z.boolean().optional(),
-  addressMode: z.enum(["static", "dhcp"]),
-  ipAddress: z.string().optional(),
-  netmask: z.string().optional(),
-  gateway: z.string().optional(),
+  wifi: z.object({
+    ssid: z.string().min(1, "SSID is required"),
+    security: z.object({
+      mode: z.enum(["none", "wep", "wpa", "wpa2"]),
+      password: z.string().optional()
+    }),
+    channel: z.enum(["auto", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"]),
+    band: z.enum(["2.4", "5"]),
+    hidden: z.boolean()
+  }),
+  ipv4: z.object({
+    mode: z.enum(["dhcp", "static"]),
+    static: z.object({
+      address: z.string().optional(),
+      netmask: z.string().optional(),
+      gateway: z.string().optional()
+    })
+  })
 })
 
 export function WifiSettingsForm() {
-  const { updateConfig } = useConfigStore()
+  const { updateConfig, getConfig } = useConfigStore()
   const [isSaving, setIsSaving] = useState(false)
+
   const form = useForm<z.infer<typeof wifiFormSchema>>({
     resolver: zodResolver(wifiFormSchema),
     defaultValues: {
-      enabled: true,
-      mode: "client",
-      ssid: "",
-      security: "wpa2",
-      password: "",
-      channel: "auto",
-      band: "2.4",
-      hidden: false,
-      addressMode: "dhcp",
-      ipAddress: "",
-      netmask: "",
-      gateway: "",
-    },
+      enabled: getConfig().network.interfaces.wlan0.enabled,
+      mode: getConfig().network.interfaces.wlan0.mode,
+      wifi: getConfig().network.interfaces.wlan0.wifi,
+      ipv4: getConfig().network.interfaces.wlan0.ipv4
+    }
   })
 
-  async function onSubmit(values: z.infer<typeof wifiFormSchema>) {
+  const onSubmit = async (values: z.infer<typeof wifiFormSchema>) => {
     setIsSaving(true)
-    
     try {
       updateConfig(['network', 'interfaces', 'wlan0'], {
-        type: 'wireless',
-        enabled: values.enabled,
-        mode: values.mode,
-        wifi: {
-          ssid: values.ssid,
-          security: {
-            mode: values.security,
-            password: values.password || '',
-          },
-          channel: values.channel,
-          band: values.band,
-          hidden: values.hidden ?? false,
-        },
-        ipv4: {
-          mode: values.addressMode,
-          ...(values.addressMode === 'static' && {
-            address: values.ipAddress || '',
-            netmask: values.netmask || '',
-            gateway: values.gateway || '',
-          }),
-        },
+        ...getConfig().network.interfaces.wlan0,
+        ...values
       })
-
+      
       toast.success('WiFi settings saved successfully!', {
-        duration: 3000,
+        duration: 3000
       })
     } catch (error) {
       console.error('Error saving WiFi settings:', error)
-      toast.error('Failed to save WiFi settings. Please try again.', {
-        duration: 5000,
+      toast.error('Failed to save WiFi settings', {
+        duration: 5000
       })
     } finally {
       setIsSaving(false)
@@ -92,26 +73,24 @@ export function WifiSettingsForm() {
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         <FormField
           control={form.control}
           name="enabled"
           render={({ field }) => (
-            <FormItem className="flex flex-row items-start space-x-3 space-y-0">
+            <FormItem className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <FormLabel>Enable WiFi</FormLabel>
+                <FormDescription>
+                  Enable or disable the wireless interface
+                </FormDescription>
+              </div>
               <FormControl>
-                <Checkbox
+                <Switch
                   checked={field.value}
                   onCheckedChange={field.onChange}
                 />
               </FormControl>
-              <div className="space-y-1 leading-none">
-                <FormLabel>
-                  Enable WiFi
-                </FormLabel>
-                <FormDescription>
-                  Enable or disable the WiFi interface
-                </FormDescription>
-              </div>
             </FormItem>
           )}
         />
@@ -121,13 +100,13 @@ export function WifiSettingsForm() {
           name="mode"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Mode</FormLabel>
+              <FormLabel>WiFi Mode</FormLabel>
               <Select onValueChange={field.onChange} defaultValue={field.value}>
                 <SelectTrigger>
                   <SelectValue placeholder="Select mode" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="client">Client Mode</SelectItem>
+                  <SelectItem value="client">Client (Station)</SelectItem>
                   <SelectItem value="ap">Access Point</SelectItem>
                 </SelectContent>
               </Select>
@@ -137,12 +116,12 @@ export function WifiSettingsForm() {
 
         <FormField
           control={form.control}
-          name="ssid"
+          name="wifi.ssid"
           render={({ field }) => (
             <FormItem>
               <FormLabel>SSID</FormLabel>
               <FormControl>
-                <Input {...field} placeholder="Network name" />
+                <Input {...field} placeholder="Enter network name" />
               </FormControl>
             </FormItem>
           )}
@@ -150,34 +129,34 @@ export function WifiSettingsForm() {
 
         <FormField
           control={form.control}
-          name="security"
+          name="wifi.security.mode"
           render={({ field }) => (
             <FormItem>
               <FormLabel>Security</FormLabel>
               <Select onValueChange={field.onChange} defaultValue={field.value}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select security type" />
+                  <SelectValue placeholder="Select security mode" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">None</SelectItem>
                   <SelectItem value="wep">WEP</SelectItem>
+                  <SelectItem value="wpa">WPA</SelectItem>
                   <SelectItem value="wpa2">WPA2</SelectItem>
-                  <SelectItem value="wpa3">WPA3</SelectItem>
                 </SelectContent>
               </Select>
             </FormItem>
           )}
         />
 
-        {form.watch("security") !== "none" && (
+        {form.watch("wifi.security.mode") !== "none" && (
           <FormField
             control={form.control}
-            name="password"
+            name="wifi.security.password"
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Password</FormLabel>
                 <FormControl>
-                  <Input {...field} type="password" />
+                  <Input type="password" {...field} />
                 </FormControl>
               </FormItem>
             )}
@@ -186,57 +165,122 @@ export function WifiSettingsForm() {
 
         <FormField
           control={form.control}
-          name="addressMode"
+          name="wifi.channel"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Address Mode</FormLabel>
+              <FormLabel>Channel</FormLabel>
               <Select onValueChange={field.onChange} defaultValue={field.value}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select address mode" />
+                  <SelectValue placeholder="Select channel" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="static">Static</SelectItem>
-                  <SelectItem value="dhcp">DHCP</SelectItem>
+                  <SelectItem value="auto">Auto</SelectItem>
+                  {[...Array(11)].map((_, i) => (
+                    <SelectItem key={i + 1} value={(i + 1).toString()}>
+                      Channel {i + 1}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </FormItem>
           )}
         />
 
-        {form.watch("addressMode") === "static" && (
+        <FormField
+          control={form.control}
+          name="wifi.band"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Band</FormLabel>
+              <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select band" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="2.4">2.4 GHz</SelectItem>
+                  <SelectItem value="5">5 GHz</SelectItem>
+                </SelectContent>
+              </Select>
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="wifi.hidden"
+          render={({ field }) => (
+            <FormItem className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <FormLabel>Hidden Network</FormLabel>
+                <FormDescription>
+                  Hide SSID from network scans
+                </FormDescription>
+              </div>
+              <FormControl>
+                <Switch
+                  checked={field.value}
+                  onCheckedChange={field.onChange}
+                />
+              </FormControl>
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="ipv4.mode"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>IP Configuration</FormLabel>
+              <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select IP mode" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="dhcp">DHCP</SelectItem>
+                  <SelectItem value="static">Static IP</SelectItem>
+                </SelectContent>
+              </Select>
+            </FormItem>
+          )}
+        />
+
+        {form.watch("ipv4.mode") === "static" && (
           <>
             <FormField
               control={form.control}
-              name="ipAddress"
+              name="ipv4.static.address"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>IP Address</FormLabel>
                   <FormControl>
-                    <Input {...field} placeholder="IP Address" />
+                    <Input {...field} placeholder="192.168.1.100" />
                   </FormControl>
                 </FormItem>
               )}
             />
+            
             <FormField
               control={form.control}
-              name="netmask"
+              name="ipv4.static.netmask"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Netmask</FormLabel>
+                  <FormLabel>Subnet Mask</FormLabel>
                   <FormControl>
-                    <Input {...field} placeholder="Netmask" />
+                    <Input {...field} placeholder="255.255.255.0" />
                   </FormControl>
                 </FormItem>
               )}
             />
+
             <FormField
               control={form.control}
-              name="gateway"
+              name="ipv4.static.gateway"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Gateway</FormLabel>
                   <FormControl>
-                    <Input {...field} placeholder="Gateway" />
+                    <Input {...field} placeholder="192.168.1.1" />
                   </FormControl>
                 </FormItem>
               )}

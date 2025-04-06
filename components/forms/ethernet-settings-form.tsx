@@ -4,69 +4,64 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import * as z from "zod"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel } from "@/components/ui/form"
+import { Form, FormField, FormItem, FormLabel, FormControl, FormDescription } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
 import { useConfigStore } from "@/lib/stores/configuration-store"
 import { useState } from "react"
 import { RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 
 const ethernetFormSchema = z.object({
-  interface: z.string(),
   enabled: z.boolean(),
-  mode: z.enum(["static", "dhcp"]),
-  ipAddress: z.string().optional(),
-  subnetMask: z.string().optional(),
-  gateway: z.string().optional(),
-  dns1: z.string().optional(),
-  dns2: z.string().optional(),
-  speed: z.enum(["auto", "10", "100", "1000"]),
-  duplex: z.enum(["auto", "full", "half"]),
+  mode: z.enum(["dhcp", "static"]),
+  ipv4: z.object({
+    static: z.object({
+      address: z.string().optional(),
+      netmask: z.string().optional(),
+      gateway: z.string().optional()
+    }),
+    dns: z.object({
+      primary: z.string().optional(),
+      secondary: z.string().optional()
+    })
+  }),
+  link: z.object({
+    speed: z.enum(["auto", "10", "100", "1000"]),
+    duplex: z.enum(["auto", "full", "half"])
+  })
 })
 
 export function EthernetSettingsForm() {
-  const { updateConfig } = useConfigStore()
+  const { updateConfig, getConfig } = useConfigStore()
   const [isSaving, setIsSaving] = useState(false)
+
   const form = useForm<z.infer<typeof ethernetFormSchema>>({
     resolver: zodResolver(ethernetFormSchema),
     defaultValues: {
-      interface: "eth0",
-      enabled: true,
-      mode: "dhcp",
-      speed: "auto",
-      duplex: "auto",
-    },
+      enabled: getConfig().network.interfaces.eth0.enabled,
+      mode: getConfig().network.interfaces.eth0.ipv4.mode,
+      ipv4: getConfig().network.interfaces.eth0.ipv4,
+      link: getConfig().network.interfaces.eth0.link
+    }
   })
 
-  async function onSubmit(values: z.infer<typeof ethernetFormSchema>) {
+  const onSubmit = async (values: z.infer<typeof ethernetFormSchema>) => {
     setIsSaving(true)
     try {
-      updateConfig(['network', 'interfaces', values.interface], {
-        type: 'ethernet',
-        enabled: values.enabled,
-        link: {
-          speed: values.speed,
-          duplex: values.duplex,
-        },
-        ipv4: {
-          mode: values.mode,
-          ...(values.mode === 'static' && {
-            address: values.ipAddress,
-            netmask: values.subnetMask,
-            gateway: values.gateway,
-          }),
-        },
+      updateConfig(['network', 'interfaces', 'eth0'], {
+        ...getConfig().network.interfaces.eth0,
+        ...values
       })
-
+      
       toast.success('Ethernet settings saved successfully!', {
-        duration: 3000,
+        duration: 3000
       })
     } catch (error) {
-      console.error('Error saving Ethernet settings:', error)
-      toast.error('Failed to save Ethernet settings. Please try again.', {
-        duration: 5000,
+      console.error('Error saving ethernet settings:', error)
+      toast.error('Failed to save ethernet settings', {
+        duration: 5000
       })
     } finally {
       setIsSaving(false)
@@ -75,51 +70,111 @@ export function EthernetSettingsForm() {
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         <FormField
           control={form.control}
-          name="interface"
+          name="enabled"
+          render={({ field }) => (
+            <FormItem className="flex items-center justify-between">
+              <div className="space-y-0.5">
+                <FormLabel>Enable Interface</FormLabel>
+                <FormDescription>
+                  Enable or disable the ethernet interface
+                </FormDescription>
+              </div>
+              <FormControl>
+                <Switch
+                  checked={field.value}
+                  onCheckedChange={field.onChange}
+                />
+              </FormControl>
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="mode"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Interface</FormLabel>
+              <FormLabel>IP Configuration Mode</FormLabel>
               <Select onValueChange={field.onChange} defaultValue={field.value}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select interface" />
+                  <SelectValue placeholder="Select mode" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="eth0">ETH0</SelectItem>
-                  <SelectItem value="eth1">ETH1</SelectItem>
+                  <SelectItem value="dhcp">DHCP</SelectItem>
+                  <SelectItem value="static">Static IP</SelectItem>
                 </SelectContent>
               </Select>
             </FormItem>
           )}
         />
 
+        {form.watch("mode") === "static" && (
+          <>
+            <FormField
+              control={form.control}
+              name="ipv4.static.address"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>IP Address</FormLabel>
+                  <FormControl>
+                    <Input {...field} placeholder="192.168.1.100" />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+            
+            <FormField
+              control={form.control}
+              name="ipv4.static.netmask"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Subnet Mask</FormLabel>
+                  <FormControl>
+                    <Input {...field} placeholder="255.255.255.0" />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="ipv4.static.gateway"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Gateway</FormLabel>
+                  <FormControl>
+                    <Input {...field} placeholder="192.168.1.1" />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+          </>
+        )}
+
         <FormField
           control={form.control}
-          name="enabled"
+          name="link.speed"
           render={({ field }) => (
-            <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-              <FormControl>
-                <Checkbox
-                  checked={field.value}
-                  onCheckedChange={field.onChange}
-                />
-              </FormControl>
-              <div className="space-y-1 leading-none">
-                <FormLabel>
-                  Enable Interface
-                </FormLabel>
-                <FormDescription>
-                  Enable or disable this ethernet interface
-                </FormDescription>
-              </div>
+            <FormItem>
+              <FormLabel>Link Speed</FormLabel>
+              <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select speed" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="auto">Auto</SelectItem>
+                  <SelectItem value="10">10 Mbps</SelectItem>
+                  <SelectItem value="100">100 Mbps</SelectItem>
+                  <SelectItem value="1000">1 Gbps</SelectItem>
+                </SelectContent>
+              </Select>
             </FormItem>
           )}
         />
 
-        {/* Add more fields for IP configuration, speed, duplex, etc. */}
-        
         <Button type="submit" disabled={isSaving}>
           {isSaving ? (
             <>
