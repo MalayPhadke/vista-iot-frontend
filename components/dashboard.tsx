@@ -16,6 +16,17 @@ import {
   Wifi,
   ArrowLeft,
   Code,
+  FileDigit,
+  Tag,
+  UserCircle,
+  BarChart,
+  Cog,
+  Clock,
+  HardDrive as HardDiskIcon,
+  Activity as MemoryIcon,
+  Cpu,
+  AreaChart,
+  Terminal
 } from "lucide-react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -40,6 +51,7 @@ import { SidebarNav } from "@/components/sidebar-nav"
 import { DeviceConfigurationPanel } from "@/components/device-configuration-panel"
 import HardwareTab from "@/components/tabs/hardware-tab"
 import ConfigurationTab from "@/components/tabs/configuration-tab"
+import IOTagManagement from "@/components/tabs/io-tag-tab"
 
 // Types for the navigation items
 type NavItem = {
@@ -49,6 +61,8 @@ type NavItem = {
   active?: boolean
   badge?: string
   submenu?: NavItem[]
+  dynamicSubmenu?: string
+  isIoTagSection?: boolean
 }
 
 function DashboardContent() {
@@ -58,8 +72,102 @@ function DashboardContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const deviceId = searchParams.get("device")
+  const section = searchParams.get("section")
+  const portId = searchParams.get("portId")
+  const deviceItemId = searchParams.get("deviceId")
   const [showReconfigureOption, setShowReconfigureOption] = useState(false)
   const [isConfiguring, setIsConfiguring] = useState(false)
+  
+  // Mock IO ports data for the sidebar tree view
+  const [ioPorts, setIoPorts] = useState([
+    {
+      id: "port-1",
+      name: "COM1",
+      type: "builtin",
+      enabled: true,
+      description: "Main serial port for device communication",
+      scanTime: 1000,
+      timeOut: 3000,
+      retryCount: 3,
+      autoRecoverTime: 10,
+      scanMode: "Serial",
+      serialSettings: {
+        port: "COM1",
+        baudRate: 9600,
+        dataBit: 8,
+        stopBit: 1,
+        parity: "None",
+        rts: false,
+        dtr: false
+      },
+      devices: [
+        {
+          id: "device-1",
+          name: "Crane1",
+          type: "Modbus RTU",
+          enabled: true,
+          unitNumber: 1,
+          description: "Tower crane monitoring system",
+          tagWriteType: "Single",
+          addDeviceNameAsPrefix: true,
+          extensionProperties: {
+            useAsciiProtocol: 0,
+            packetDelay: 10,
+            digitalBlockSize: 16,
+            analogBlockSize: 8
+          },
+          tags: []
+        },
+        {
+          id: "device-2",
+          name: "CSS",
+          type: "Modbus RTU",
+          enabled: true,
+          unitNumber: 2,
+          description: "Control system sensors",
+          tagWriteType: "Single",
+          addDeviceNameAsPrefix: true,
+          extensionProperties: {
+            useAsciiProtocol: 0,
+            packetDelay: 10,
+            digitalBlockSize: 16,
+            analogBlockSize: 8
+          },
+          tags: []
+        },
+        {
+          id: "device-3",
+          name: "CapacitorBank1",
+          type: "Modbus RTU",
+          enabled: false,
+          unitNumber: 3,
+          description: "Power factor correction capacitor bank",
+          tagWriteType: "Single",
+          addDeviceNameAsPrefix: true,
+          extensionProperties: {
+            useAsciiProtocol: 0,
+            packetDelay: 10,
+            digitalBlockSize: 16,
+            analogBlockSize: 8
+          },
+          tags: []
+        }
+      ]
+    },
+    {
+      id: "port-2",
+      name: "COM2",
+      type: "minipcie",
+      enabled: true,
+      description: "Expansion port for additional devices",
+      scanTime: 1000,
+      timeOut: 3000,
+      retryCount: 3,
+      autoRecoverTime: 10,
+      scanMode: "Serial",
+      devices: []
+    }
+  ])
 
   // Dialog states
   const [restartDialogOpen, setRestartDialogOpen] = useState(false)
@@ -82,6 +190,39 @@ function DashboardContent() {
       href: "/",
       icon: Gauge,
       active: router.pathname === "/",
+    },
+    {
+      title: "Overview",
+      href: "?tab=overview",
+      icon: Gauge,
+      active: activeTab === "overview",
+      children: [
+        {
+          title: "System Uptime",
+          href: "?tab=overview&section=system-uptime",
+          icon: Clock
+        },
+        {
+          title: "CPU Load",
+          href: "?tab=overview&section=cpu-load",
+          icon: Cpu
+        },
+        {
+          title: "Memory Usage",
+          href: "?tab=overview&section=memory-usage",
+          icon: MemoryIcon
+        },
+        {
+          title: "Storage",
+          href: "?tab=overview&section=storage",
+          icon: HardDiskIcon
+        },
+        {
+          title: "Services Status",
+          href: "?tab=overview&section=services-status",
+          icon: Server
+        }
+      ]
     },
     {
       title: "Networking",
@@ -111,6 +252,24 @@ function DashboardContent() {
         { title: "Port Forwarding", href: "?tab=network&section=port-forwarding", icon: Network },
         { title: "Dynamic DNS", href: "?tab=network&section=ddns", icon: Database },
         { title: "WiFi", href: "?tab=network&section=wifi", icon: Wifi },
+      ],
+    },
+    {
+      title: "Data Center",
+      href: "?tab=datacenter",
+      icon: Server,
+      active: activeTab === "datacenter",
+      submenu: [
+        { 
+          title: "IO Tag", 
+          href: "?tab=datacenter&section=io-tag", 
+          icon: Tag, 
+          isIoTagSection: true
+        },
+        { title: "User Tag", href: "?tab=datacenter&section=user-tag", icon: Tag },
+        { title: "Calculation Tag", href: "?tab=datacenter&section=calculation-tag", icon: Tag },
+        { title: "Stats Tag", href: "?tab=datacenter&section=stats-tag", icon: BarChart },
+        { title: "System Tag", href: "?tab=datacenter&section=system-tag", icon: Tag },
       ],
     },
     {
@@ -273,7 +432,7 @@ function DashboardContent() {
         </div>
         
         <div className="flex-1 overflow-y-auto">
-          <SidebarNav items={navItems} sidebarOpen={sidebarOpen} />
+          <SidebarNav items={navItems} sidebarOpen={sidebarOpen} ioPorts={ioPorts} />
         </div>
       </div>
 
@@ -326,52 +485,55 @@ function DashboardContent() {
             <DeviceConfigurationPanel deviceId={deviceId} onComplete={handleConfigurationComplete} />
           ) : (
             <>
-              {/* System status cards */}
-              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium">System Uptime</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">10d 14h 32m</div>
-                    <p className="text-xs text-muted-foreground">Last restart: 2023-06-15 08:23:45</p>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium">CPU Load</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">24%</div>
-                    <Progress value={24} className="h-2" />
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium">Memory Usage</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">512MB / 2GB</div>
-                    <Progress value={25} className="h-2" />
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium">Storage</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">2.1GB / 8GB</div>
-                    <Progress value={26} className="h-2" />
-                  </CardContent>
-                </Card>
-              </div>
+              {/* System status cards - only shown for Overview section */}
+              {activeTab === "overview" && (
+                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium">System Uptime</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold">10d 14h 32m</div>
+                      <p className="text-xs text-muted-foreground">Last restart: 2023-06-15 08:23:45</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium">CPU Load</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold">24%</div>
+                      <Progress value={24} className="h-2" />
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium">Memory Usage</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold">512MB / 2GB</div>
+                      <Progress value={25} className="h-2" />
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-sm font-medium">Storage</CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold">2.1GB / 8GB</div>
+                      <Progress value={26} className="h-2" />
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
 
               {/* Tabs for main sections */}
               <div className="mt-8">
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
-                  <TabsList className="grid w-full md:w-auto md:inline-grid grid-cols-2 md:grid-cols-8">
+                  <TabsList className="grid w-full md:w-auto md:inline-grid grid-cols-2 md:grid-cols-9">
                     <TabsTrigger value="overview">Overview</TabsTrigger>
                     <TabsTrigger value="network">Network</TabsTrigger>
+                    <TabsTrigger value="datacenter">Data Center</TabsTrigger>
                     <TabsTrigger value="security">Security</TabsTrigger>
                     <TabsTrigger value="protocols">Protocols</TabsTrigger>
                     <TabsTrigger value="mqtt">MQTT</TabsTrigger>
@@ -386,6 +548,61 @@ function DashboardContent() {
 
                   <TabsContent value="network" className="mt-6 space-y-6">
                     <NetworkTab />
+                  </TabsContent>
+
+                  <TabsContent value="datacenter" className="mt-6 space-y-6">
+                    {section === 'io-tag' ? (
+                      <IOTagManagement 
+                        ioPorts={ioPorts} 
+                        setIoPorts={setIoPorts}
+                        selectedPortId={portId}
+                        selectedDeviceId={deviceItemId}
+                      />
+                    ) : (
+                      <div className="rounded-lg border p-8">
+                        <h2 className="text-lg font-semibold mb-4">Data Center Management</h2>
+                        <p className="text-muted-foreground mb-4">
+                          Configure and manage your data tags for the IoT gateway.
+                        </p>
+                        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+                          <Card 
+                            className="p-4 cursor-pointer hover:border-primary transition-colors"
+                            onClick={() => handleNavigation("?tab=datacenter&section=io-tag")}
+                          >
+                            <h3 className="font-medium flex items-center"><Tag className="mr-2 h-4 w-4" /> IO Tags</h3>
+                            <p className="text-sm text-muted-foreground mt-1">Manage input/output data tags</p>
+                          </Card>
+                          <Card 
+                            className="p-4 cursor-pointer hover:border-primary transition-colors"
+                            onClick={() => handleNavigation("?tab=datacenter&section=user-tag")}
+                          >
+                            <h3 className="font-medium flex items-center"><UserCircle className="mr-2 h-4 w-4" /> User Tags</h3>
+                            <p className="text-sm text-muted-foreground mt-1">Configure custom user-defined tags</p>
+                          </Card>
+                          <Card 
+                            className="p-4 cursor-pointer hover:border-primary transition-colors"
+                            onClick={() => handleNavigation("?tab=datacenter&section=calc-tag")}
+                          >
+                            <h3 className="font-medium flex items-center"><FileDigit className="mr-2 h-4 w-4" /> Calculation Tags</h3>
+                            <p className="text-sm text-muted-foreground mt-1">Set up calculated data points</p>
+                          </Card>
+                          <Card 
+                            className="p-4 cursor-pointer hover:border-primary transition-colors"
+                            onClick={() => handleNavigation("?tab=datacenter&section=stats-tag")}
+                          >
+                            <h3 className="font-medium flex items-center"><BarChart className="mr-2 h-4 w-4" /> Stats Tags</h3>
+                            <p className="text-sm text-muted-foreground mt-1">Configure statistical data points</p>
+                          </Card>
+                          <Card 
+                            className="p-4 cursor-pointer hover:border-primary transition-colors"
+                            onClick={() => handleNavigation("?tab=datacenter&section=system-tag")}
+                          >
+                            <h3 className="font-medium flex items-center"><Cog className="mr-2 h-4 w-4" /> System Tags</h3>
+                            <p className="text-sm text-muted-foreground mt-1">Manage system-level tags</p>
+                          </Card>
+                        </div>
+                      </div>
+                    )}
                   </TabsContent>
 
                   <TabsContent value="security" className="mt-6 space-y-6">

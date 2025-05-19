@@ -50,7 +50,7 @@ export default function ProtocolsTab() {
           </TabsContent>
 
           <TabsContent value="modbus">
-            <ModbusForm />
+            <ModbusForm separateAdvancedConfig={true} />
           </TabsContent>
 
           <TabsContent value="iec">

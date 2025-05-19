@@ -1,0 +1,888 @@
+"use client"
+
+import { useState, useEffect } from "react"
+import { 
+  Plus, 
+  Edit, 
+  Trash2, 
+  ChevronRight, 
+  Server,
+  Terminal,
+  Cpu,
+  Tags,
+  ChevronDown
+} from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { 
+  Card, 
+  CardContent, 
+  CardDescription, 
+  CardHeader, 
+  CardTitle 
+} from "@/components/ui/card"
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogDescription, 
+  DialogHeader, 
+  DialogTitle 
+} from "@/components/ui/dialog"
+import { 
+  Table, 
+  TableBody, 
+  TableCell, 
+  TableHead, 
+  TableHeader, 
+  TableRow 
+} from "@/components/ui/table"
+import { useToast } from "@/components/ui/use-toast"
+import { IOPortForm, IOPortConfig } from "@/components/forms/io-tag-form"
+import { DeviceForm, DeviceConfig } from "@/components/forms/device-form"
+import { IOTagDetailView } from "@/components/forms/io-tag-detail"
+import { 
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+
+// Get type display name
+function getTypeDisplayName(type: string) {
+  switch (type) {
+    case "builtin": return "Built-in Serial Port"
+    case "usb": return "USB Serial Port"
+    case "minipcie": return "miniPCIe Serial Port"
+    case "tcpip-client": return "TCP/IP Client"
+    case "tcpip-server": return "TCP/IP Server"
+    case "api-rest": return "REST API"
+    case "api-mqtt": return "MQTT Client"
+    case "api-websocket": return "WebSocket Client"
+    case "api-opcua": return "OPC UA Client"
+    default: return type
+  }
+}
+
+// Mock device data for demonstration
+interface ExtensionProperties {
+  useAsciiProtocol: number
+  packetDelay: number
+  digitalBlockSize: number
+  analogBlockSize: number
+}
+
+interface Device {
+  id: string
+  name: string
+  type: string
+  enabled: boolean
+  unitNumber: number
+  description: string
+  tagWriteType: string
+  addDeviceNameAsPrefix: boolean
+  extensionProperties: ExtensionProperties
+  tags: IOTag[]
+}
+
+interface Port extends IOPortConfig {
+  id: string
+  name: string
+  type: string
+  enabled: boolean
+  devices: Device[]
+  description: string
+  scanTime: number
+  timeOut: number
+  retryCount: number
+  autoRecoverTime: number
+  scanMode: string
+  serialSettings?: any
+}
+
+interface IOTag {
+  id: string
+  name: string
+  dataType: string
+  address: string
+  description: string
+}
+
+interface IOTagManagementProps {
+  ioPorts: any[];
+  setIoPorts: React.Dispatch<React.SetStateAction<any[]>>;
+  selectedPortId: string | null;
+  selectedDeviceId: string | null;
+}
+
+export default function IOTagManagement({ ioPorts, setIoPorts, selectedPortId, selectedDeviceId }: IOTagManagementProps): React.ReactNode {
+  const { toast } = useToast()
+  const [showAddPortForm, setShowAddPortForm] = useState(false)
+  const [editingPort, setEditingPort] = useState<Port | null>(null)
+  const [deletePortDialog, setDeletePortDialog] = useState<{ open: boolean, port: Port | null }>({ open: false, port: null })
+  const [selectedPort, setSelectedPort] = useState<Port | null>(null)
+  const [expandedDevices, setExpandedDevices] = useState<Record<string, boolean>>({})
+  const [expandedPorts, setExpandedPorts] = useState<Record<string, boolean>>({})
+  
+  // Device management states
+  const [showAddDeviceForm, setShowAddDeviceForm] = useState(false)
+  const [addDevicePortId, setAddDevicePortId] = useState<string>('')
+  const [editingDevice, setEditingDevice] = useState<{device: Device, portId: string} | null>(null)
+  const [deleteDeviceDialog, setDeleteDeviceDialog] = useState<{ open: boolean, device: Device | null, portId: string }>({ open: false, device: null, portId: '' })
+  const [selectedDevice, setSelectedDevice] = useState<{device: Device, portId: string} | null>(null)
+  
+  // Initialize the device state based on the passed in ports
+  const [devices, setDevices] = useState<Record<string, Device[]>>(() => {
+    const deviceMap: Record<string, Device[]> = {};
+    ioPorts.forEach(port => {
+      deviceMap[port.id] = port.devices || [];
+    });
+    return deviceMap;
+  }) 
+  
+  // Toggle port expansion
+  const togglePortExpansion = (portId: string) => {
+    setExpandedPorts(prev => ({
+      ...prev,
+      [portId]: !prev[portId]
+    }));
+  }
+  
+  // Toggle device expansion
+  const toggleDeviceExpansion = (portId: string, deviceId: string) => {
+    const key = `${portId}-${deviceId}`;
+    setExpandedDevices(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }));
+  }
+
+  // Add new IO Port
+  const handleAddPort = (config: IOPortConfig) => {
+    const newPort: Port = {
+      ...config,
+      id: `port-${Date.now()}`,
+      devices: [],
+      enabled: config.enabled
+    }
+    setIoPorts([...ioPorts, newPort])
+    setShowAddPortForm(false)
+    // Initialize empty devices array for this port
+    setDevices(prev => ({
+      ...prev,
+      [newPort.id]: []
+    }))
+    toast({
+      title: "IO Port Added",
+      description: `Successfully added port: ${config.name}`,
+    })
+  }
+  
+  // Update existing IO Port
+  const handleUpdatePort = (config: IOPortConfig) => {
+    setIoPorts(ioPorts.map(port => port.id === config.id ? {
+      ...port,
+      ...config,
+      devices: port.devices // Keep the existing devices
+    } : port))
+    setEditingPort(null)
+    toast({
+      title: "IO Port Updated",
+      description: `Successfully updated port: ${config.name}`,
+    })
+  }
+  
+  // Delete IO Port
+  const handleDeletePort = () => {
+    if (deletePortDialog.port) {
+      setIoPorts(ioPorts.filter(port => port.id !== deletePortDialog.port?.id))
+      // Also remove the devices associated with this port
+      const newDevices = { ...devices }
+      delete newDevices[deletePortDialog.port.id]
+      setDevices(newDevices)
+      
+      if (selectedPort?.id === deletePortDialog.port.id) {
+        setSelectedPort(null)
+        // Redirect to the IO Tag section without a selected port
+        window.history.pushState({}, '', '?tab=datacenter&section=io-tag')
+      }
+      toast({
+        title: "IO Port Deleted",
+        description: `Successfully deleted port: ${deletePortDialog.port.name}`,
+      })
+      setDeletePortDialog({ open: false, port: null })
+    }
+  }
+  
+  // Handle port selection
+  const handlePortSelect = (port: Port) => {
+    setSelectedPort(port)
+    // Update URL to reflect selected port
+    window.history.pushState({}, '', `?tab=datacenter&section=io-tag&portId=${port.id}`)
+  }
+  
+  // Handle showing add device form for a specific port
+  const handleShowAddDeviceForm = (portId: string) => {
+    setSelectedPort(ioPorts.find(p => p.id === portId) || null);
+    setShowAddDeviceForm(true);
+  }
+  
+  // Handle device form submission for adding a new device
+  const handleAddDevice = (config: DeviceConfig, portId: string) => {
+    // Create a default IO tag for the new device
+    const defaultTag: IOTag = {
+      id: `tag-${Date.now()}`,
+      name: `${config.name}_Status`,
+      dataType: "Bool",
+      address: "40001",
+      description: "Device status indicator"
+    }
+    
+    const newDevice: Device = {
+      id: config.id,
+      name: config.name,
+      type: config.deviceType,
+      enabled: config.enabled,
+      unitNumber: config.unitNumber,
+      description: config.description,
+      tagWriteType: config.tagWriteType,
+      addDeviceNameAsPrefix: config.addDeviceNameAsPrefix,
+      extensionProperties: {
+        useAsciiProtocol: config.useAsciiProtocol,
+        packetDelay: config.packetDelay,
+        digitalBlockSize: config.digitalBlockSize,
+        analogBlockSize: config.analogBlockSize
+      },
+      tags: [defaultTag] // Add the default tag to the device
+    }
+    
+    // Update devices state
+    setDevices(prev => ({
+      ...prev,
+      [portId]: [...(prev[portId] || []), newDevice]
+    }))
+    
+    // Also update the ioPorts state to keep them in sync
+    setIoPorts(prev => prev.map(port => {
+      if (port.id === portId) {
+        return {
+          ...port,
+          devices: [...(port.devices || []), newDevice]
+        };
+      }
+      return port;
+    }));
+    
+    setShowAddDeviceForm(false);
+    
+    // Navigate to the new device
+    window.history.pushState({}, '', `?tab=datacenter&section=io-tag&portId=${portId}&deviceId=${newDevice.id}`);
+    
+    toast({
+      title: "Device Added",
+      description: `Added device ${config.name} to ${ioPorts.find(p => p.id === portId)?.name}`,
+    })
+  }
+  
+  // Handle edit device form submission
+  const handleUpdateDevice = (config: DeviceConfig, portId: string) => {
+    // Update the local devices state
+    setDevices(prev => {
+      const updatedDevices = [...(prev[portId] || [])];
+      const index = updatedDevices.findIndex(d => d.id === config.id);
+      
+      if (index !== -1) {
+        updatedDevices[index] = {
+          ...updatedDevices[index],
+          name: config.name,
+          type: config.deviceType,
+          enabled: config.enabled,
+          unitNumber: config.unitNumber,
+          description: config.description,
+          tagWriteType: config.tagWriteType,
+          addDeviceNameAsPrefix: config.addDeviceNameAsPrefix,
+          extensionProperties: {
+            useAsciiProtocol: config.useAsciiProtocol,
+            packetDelay: config.packetDelay,
+            digitalBlockSize: config.digitalBlockSize,
+            analogBlockSize: config.analogBlockSize
+          }
+        };
+      }
+      
+      return {
+        ...prev,
+        [portId]: updatedDevices
+      };
+    });
+    
+    // Also update the ioPorts state to keep them in sync
+    setIoPorts(prev => prev.map(port => {
+      if (port.id === portId) {
+        const updatedDevices = [...(port.devices || [])];
+        const index = updatedDevices.findIndex(d => d.id === config.id);
+        
+        if (index !== -1) {
+          updatedDevices[index] = {
+            ...updatedDevices[index],
+            name: config.name,
+            type: config.deviceType,
+            enabled: config.enabled,
+            // Other properties would be synced here too
+          };
+        }
+        
+        return {
+          ...port,
+          devices: updatedDevices
+        };
+      }
+      return port;
+    }));
+    
+    setEditingDevice(null);
+    
+    toast({
+      title: "Device Updated",
+      description: `Updated device ${config.name}`,
+    });
+  }
+  
+  // Handle device deletion
+  const handleDeleteDevice = () => {
+    if (deleteDeviceDialog.device && deleteDeviceDialog.portId) {
+      // Update devices state
+      setDevices(prev => {
+        const updatedDevices = (prev[deleteDeviceDialog.portId] || []).filter(
+          device => device.id !== deleteDeviceDialog.device?.id
+        );
+        
+        return {
+          ...prev,
+          [deleteDeviceDialog.portId]: updatedDevices
+        };
+      });
+      
+      // Also update ioPorts state
+      setIoPorts(prev => prev.map(port => {
+        if (port.id === deleteDeviceDialog.portId) {
+          return {
+            ...port,
+            devices: (port.devices || []).filter(
+              device => device.id !== deleteDeviceDialog.device?.id
+            )
+          };
+        }
+        return port;
+      }));
+      
+      if (selectedDevice?.device.id === deleteDeviceDialog.device.id) {
+        setSelectedDevice(null);
+        // Redirect to just the port view without a selected device
+        window.history.pushState({}, '', `?tab=datacenter&section=io-tag&portId=${deleteDeviceDialog.portId}`);
+      }
+      
+      toast({
+        title: "Device Deleted",
+        description: `Successfully deleted device: ${deleteDeviceDialog.device.name}`
+      })
+      
+      setDeleteDeviceDialog({ open: false, device: null, portId: '' });
+    }
+  }
+  
+  // Handle device selection
+  const handleDeviceSelect = (device: Device, portId: string) => {
+    setSelectedDevice({device, portId});
+  }
+  
+  // Handle IO tag updates
+  const handleUpdateTags = (portId: string, deviceId: string, updatedTags: IOTag[]) => {
+    // Update devices state
+    setDevices(prev => {
+      const updatedDevices = {...prev};
+      if (updatedDevices[portId]) {
+        updatedDevices[portId] = updatedDevices[portId].map((device: Device) => 
+          device.id === deviceId ? {...device, tags: updatedTags} : device
+        );
+      }
+      return updatedDevices;
+    });
+    
+    // Also update ioPorts state to keep them in sync
+    setIoPorts(prev => prev.map(port => {
+      if (port.id === portId) {
+        return {
+          ...port,
+          devices: (port.devices || []).map((device: Device) => 
+            device.id === deviceId ? {...device, tags: updatedTags} : device
+          )
+        };
+      }
+      return port;
+    }));
+    
+    toast({
+      title: "IO Tags Updated",
+      description: `Successfully updated IO tags for device`
+    });
+  }
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle>IO Tag Management</CardTitle>
+            <CardDescription>
+              Configure communication ports, devices, and IO tags for your gateway
+            </CardDescription>
+          </div>
+          <Button onClick={() => setShowAddPortForm(true)}>
+            <Plus className="mr-2 h-4 w-4" /> Add Port
+          </Button>
+        </CardHeader>
+        <CardContent>
+          {ioPorts.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8">
+              <Terminal className="h-12 w-12 text-muted-foreground mb-4" />
+              <p className="text-muted-foreground">No communication ports configured yet</p>
+              <Button 
+                variant="outline" 
+                className="mt-4" 
+                onClick={() => setShowAddPortForm(true)}
+              >
+                <Plus className="mr-2 h-4 w-4" /> Add Your First Port
+              </Button>
+            </div>
+          ) : (
+            <div className="grid md:grid-cols-[320px_1fr] gap-6">
+              <div className="border rounded-lg overflow-hidden">
+                <div className="bg-muted py-2 px-4 font-medium">Communication Ports & Devices</div>
+                <div className="max-h-[600px] overflow-y-auto">
+                  {ioPorts.map(port => (
+                    <div key={port.id} className="border-b last:border-b-0">
+                      <div 
+                        className={`flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-muted/50 ${selectedPort?.id === port.id ? 'bg-muted' : ''}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handlePortSelect(port);
+                          togglePortExpansion(port.id);
+                        }}
+                      >
+                        <div className="flex items-center">
+                          <Terminal className="h-4 w-4 mr-2 text-primary" />
+                          <div>
+                            <p className="font-medium">{port.name}</p>
+                            <p className="text-xs text-muted-foreground">{getTypeDisplayName(port.type)}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-1">
+                          <Button 
+                            variant="ghost" 
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleShowAddDeviceForm(port.id);
+                            }}
+                          >
+                            <Plus className="h-3 w-3" />
+                          </Button>
+                          <ChevronRight className={`h-4 w-4 transition-transform ${expandedPorts[port.id] ? 'rotate-90' : ''}`} />
+                        </div>
+                      </div>
+                      
+                      {/* Devices under this port */}
+                      {devices[port.id]?.length > 0 && (
+                        <div 
+                          className={`pl-8 overflow-hidden transition-all duration-300 ease-in-out border-t border-dashed ${expandedPorts[port.id] ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'}`}
+                        >
+                          {devices[port.id].map((device: Device) => (
+                              <div key={device.id} className="border-b last:border-b-0 border-dashed">
+                                <div 
+                                  className="flex items-center justify-between px-4 py-2 cursor-pointer hover:bg-muted/30"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleDeviceExpansion(port.id, device.id);
+                                  }}
+                                >
+                                  <div className="flex items-center">
+                                    <Cpu className="h-3 w-3 mr-2 text-secondary" />
+                                    <span className="text-sm">{device.name}</span>
+                                    {!device.enabled && <span className="ml-2 text-xs text-muted-foreground">(Disabled)</span>}
+                                  </div>
+                                  <ChevronDown 
+                                    className={`h-3 w-3 transition-transform ${expandedDevices[`${port.id}-${device.id}`] ? 'rotate-180' : ''}`} 
+                                  />
+                                </div>
+                                
+                                {/* Tags under this device */}
+                                <div
+                                  className={`overflow-hidden transition-all duration-200 ease-in-out ${expandedDevices[`${port.id}-${device.id}`] ? 'max-h-[300px] opacity-100' : 'max-h-0 opacity-0'}`}
+                                >
+                                <div className="pl-6 py-1">
+                                  {/* IO Tag subsection - clickable */}
+                                  <div 
+                                    className="flex items-center justify-between px-4 py-2 cursor-pointer hover:bg-muted/40 rounded-sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeviceSelect(device, port.id);
+                                      // Update URL to include device ID
+                                      window.history.pushState({}, '', `?tab=datacenter&section=io-tag&portId=${port.id}&deviceId=${device.id}`);
+                                    }}
+                                  >
+                                    <div className="flex items-center">
+                                      <Tags className="h-3 w-3 mr-2 text-primary" />
+                                      <span className="text-sm font-medium">IO Tag</span>
+                                      <span className="ml-2 text-xs text-muted-foreground">({device.tags.length})</span>
+                                    </div>
+                                    <ChevronRight className="h-3 w-3" />
+                                  </div>
+                                  
+                                  {/* Preview of tags */}
+                                  {device.tags.length > 0 && (
+                                    <div className="mt-1 ml-5 border-l border-dashed pl-2">
+                                      {device.tags.slice(0, 3).map(tag => (
+                                        <div key={tag.id} className="flex items-center px-2 py-1 text-xs">
+                                          <Tags className="h-2 w-2 mr-1 text-muted-foreground" />
+                                          <span>{tag.name}</span>
+                                        </div>
+                                      ))}
+                                      {device.tags.length > 3 && (
+                                        <div className="text-xs text-muted-foreground px-2 py-1">
+                                          + {device.tags.length - 3} more tags
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              
+              {selectedDevice ? (
+                <div className="border rounded-lg p-4">
+                  <IOTagDetailView 
+                    device={selectedDevice.device} 
+                    portId={selectedDevice.portId} 
+                    onUpdate={handleUpdateTags}
+                  />
+                </div>
+              ) : selectedPort ? (
+                <div className="border rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <h3 className="text-lg font-semibold">{selectedPort.name}</h3>
+                      <p className="text-sm text-muted-foreground">{getTypeDisplayName(selectedPort.type)}</p>
+                    </div>
+                    <div className="flex space-x-2">
+                      <Button 
+                        variant="ghost" 
+                        size="icon"
+                        onClick={() => setEditingPort(selectedPort)}
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="icon"
+                        onClick={() => setDeletePortDialog({ open: true, port: selectedPort })}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-4">
+                    <div className="space-y-4">
+                      <div>
+                        <h4 className="text-sm font-medium mb-2">General Settings</h4>
+                        <Table>
+                          <TableBody>
+                            <TableRow>
+                              <TableCell className="font-medium">Type</TableCell>
+                              <TableCell>{getTypeDisplayName(selectedPort.type)}</TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell className="font-medium">Description</TableCell>
+                              <TableCell>{selectedPort.description || '-'}</TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell className="font-medium">Status</TableCell>
+                              <TableCell>
+                                <div className="flex items-center">
+                                  <div className={`h-2 w-2 rounded-full mr-2 ${selectedPort.enabled ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                                  <span>{selectedPort.enabled ? 'Enabled' : 'Disabled'}</span>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell className="font-medium">Scan Time</TableCell>
+                              <TableCell>{selectedPort.scanTime} ms</TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell className="font-medium">Timeout</TableCell>
+                              <TableCell>{selectedPort.timeOut} ms</TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell className="font-medium">Retry Count</TableCell>
+                              <TableCell>{selectedPort.retryCount}</TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell className="font-medium">Auto Recover Time</TableCell>
+                              <TableCell>{selectedPort.autoRecoverTime} s</TableCell>
+                            </TableRow>
+                            <TableRow>
+                              <TableCell className="font-medium">Scan Mode</TableCell>
+                              <TableCell>{selectedPort.scanMode === 'serial' ? 'Serial Scan' : 'Parallel Scan'}</TableCell>
+                            </TableRow>
+                          </TableBody>
+                        </Table>
+                      </div>
+                      
+                      {/* Show Serial Port Settings if applicable */}
+                      {selectedPort.serialSettings && (
+                        <div>
+                          <h4 className="text-sm font-medium mb-2">Serial Port Settings</h4>
+                          <Table>
+                            <TableBody>
+                              <TableRow>
+                                <TableCell className="font-medium">Port</TableCell>
+                                <TableCell>{selectedPort.serialSettings.port}</TableCell>
+                              </TableRow>
+                              <TableRow>
+                                <TableCell className="font-medium">Baud Rate</TableCell>
+                                <TableCell>{selectedPort.serialSettings.baudRate}</TableCell>
+                              </TableRow>
+                              <TableRow>
+                                <TableCell className="font-medium">Data Bit</TableCell>
+                                <TableCell>{selectedPort.serialSettings.dataBit}</TableCell>
+                              </TableRow>
+                              <TableRow>
+                                <TableCell className="font-medium">Stop Bit</TableCell>
+                                <TableCell>{selectedPort.serialSettings.stopBit}</TableCell>
+                              </TableRow>
+                              <TableRow>
+                                <TableCell className="font-medium">Parity</TableCell>
+                                <TableCell>{selectedPort.serialSettings.parity}</TableCell>
+                              </TableRow>
+                              <TableRow>
+                                <TableCell className="font-medium">RTS</TableCell>
+                                <TableCell>{selectedPort.serialSettings.rts ? 'Yes' : 'No'}</TableCell>
+                              </TableRow>
+                              <TableRow>
+                                <TableCell className="font-medium">DTR</TableCell>
+                                <TableCell>{selectedPort.serialSettings.dtr ? 'Yes' : 'No'}</TableCell>
+                              </TableRow>
+                            </TableBody>
+                          </Table>
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Devices Section */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-sm font-semibold">Connected Devices</h4>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => handleShowAddDeviceForm(selectedPort.id)}
+                        >
+                          <Plus className="mr-1 h-3 w-3" /> Add Device
+                        </Button>
+                      </div>
+                      
+                      {devices[selectedPort.id]?.length > 0 ? (
+                        <div className="border rounded-md overflow-hidden">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Device Name</TableHead>
+                                <TableHead>Type</TableHead>
+                                <TableHead>Tags</TableHead>
+                                <TableHead></TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {devices[selectedPort.id].map(device => (
+                                <TableRow key={device.id}>
+                                  <TableCell>
+                                    <div className="flex items-center">
+                                      <span>{device.name}</span>
+                                      {!device.enabled && <span className="ml-2 text-xs text-muted-foreground">(Disabled)</span>}
+                                    </div>
+                                  </TableCell>
+                                  <TableCell>{device.type}</TableCell>
+                                  <TableCell>{device.tags.length}</TableCell>
+                                  <TableCell className="text-right">
+                                    <div className="flex justify-end space-x-1">
+                                      <Button 
+                                        variant="ghost" 
+                                        size="sm"
+                                        onClick={() => setEditingDevice({device, portId: selectedPort.id})}
+                                      >
+                                        <Edit className="h-3 w-3 mr-1" /> Edit
+                                      </Button>
+                                      <Button 
+                                        variant="ghost" 
+                                        size="sm"
+                                        onClick={() => setDeleteDeviceDialog({open: true, device, portId: selectedPort.id})}
+                                      >
+                                        <Trash2 className="h-3 w-3 mr-1" /> Delete
+                                      </Button>
+                                    </div>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      ) : (
+                        <div className="border rounded-md p-4 text-center text-muted-foreground text-sm">
+                          No devices configured for this port yet.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="border rounded-lg flex items-center justify-center p-8 text-muted-foreground">
+                  <div className="text-center">
+                    <Terminal className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <p>Select a port to view details</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Add Port Dialog */}
+      <Dialog open={showAddPortForm} onOpenChange={setShowAddPortForm}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Add New Communication Port</DialogTitle>
+            <DialogDescription>
+              Configure a new port for device communications
+            </DialogDescription>
+          </DialogHeader>
+          <IOPortForm onSubmit={handleAddPort} />
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Port Dialog */}
+      <Dialog open={!!editingPort} onOpenChange={(open) => !open && setEditingPort(null)}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Edit Port Configuration</DialogTitle>
+            <DialogDescription>
+              Update port communication settings
+            </DialogDescription>
+          </DialogHeader>
+          {editingPort && <IOPortForm onSubmit={handleUpdatePort} existingConfig={editingPort} />}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Port Confirmation Dialog */}
+      <AlertDialog 
+        open={deletePortDialog.open} 
+        onOpenChange={(open) => !open && setDeletePortDialog({ open: false, port: null })}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the port "{deletePortDialog.port?.name}" and all associated devices and tags. 
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeletePort}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Add Device Dialog */}
+      <Dialog open={showAddDeviceForm} onOpenChange={setShowAddDeviceForm}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Add New Device</DialogTitle>
+            <DialogDescription>
+              Configure a new device for {selectedPort?.name || 'this port'}
+            </DialogDescription>
+          </DialogHeader>
+          {selectedPort && (
+            <DeviceForm 
+              onSubmit={(config) => handleAddDevice(config, selectedPort.id)} 
+              portId={selectedPort.id} 
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Device Dialog */}
+      <Dialog open={!!editingDevice} onOpenChange={(open) => !open && setEditingDevice(null)}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Edit Device</DialogTitle>
+            <DialogDescription>
+              Update device configuration for {editingDevice?.device.name}
+            </DialogDescription>
+          </DialogHeader>
+          {editingDevice && (
+            <DeviceForm 
+              onSubmit={(config) => handleUpdateDevice(config, editingDevice.portId)}
+              existingConfig={{
+                id: editingDevice.device.id,
+                enabled: editingDevice.device.enabled,
+                name: editingDevice.device.name,
+                deviceType: editingDevice.device.type,
+                unitNumber: editingDevice.device.unitNumber,
+                tagWriteType: editingDevice.device.tagWriteType,
+                description: editingDevice.device.description,
+                addDeviceNameAsPrefix: editingDevice.device.addDeviceNameAsPrefix,
+                useAsciiProtocol: editingDevice.device.extensionProperties.useAsciiProtocol,
+                packetDelay: editingDevice.device.extensionProperties.packetDelay,
+                digitalBlockSize: editingDevice.device.extensionProperties.digitalBlockSize,
+                analogBlockSize: editingDevice.device.extensionProperties.analogBlockSize
+              }}
+              portId={editingDevice.portId}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Device Confirmation Dialog */}
+      <AlertDialog 
+        open={deleteDeviceDialog.open} 
+        onOpenChange={(open) => !open && setDeleteDeviceDialog({ open: false, device: null, portId: '' })}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the device "{deleteDeviceDialog.device?.name}" and all associated tags. 
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteDevice}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  )
+}
