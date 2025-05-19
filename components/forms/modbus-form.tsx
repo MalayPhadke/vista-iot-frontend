@@ -8,11 +8,12 @@ import { Form, FormField, FormItem, FormLabel, FormControl, FormDescription } fr
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useConfigStore } from "@/lib/stores/configuration-store"
 import { useState, useEffect } from "react"
-import { RefreshCw, Plus, X, FileSpreadsheet, Download, Upload, Check, Trash2 } from "lucide-react"
+import { RefreshCw, Plus, X, FileSpreadsheet, Download, Upload, Check, Trash2, ChevronDown, ChevronRight, Server, Cpu, Tag, UserCircle, FileDigit, BarChart, Cog } from "lucide-react"
 import { toast } from "sonner"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -70,36 +71,38 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
   const [isSaving, setIsSaving] = useState(false)
   const [activeTab, setActiveTab] = useState<"tcp" | "rtu">("tcp")
   
-  // State for the advanced configuration
-  const [configTabs, setConfigTabs] = useState([
-    { id: "server1", name: "Modbus Server(Meter)*", active: true },
-    { id: "tag1", name: "3D Tag(Meter-Crane.1)", active: false },
-    { id: "tag2", name: "Power Tag(Meter-CSS)", active: false },
-  ])
-  
-  // State for IO Tag ports
-  const [ioPorts, setIoPorts] = useState([
-    { id: "com1", name: "COM1", type: "Serial Port", active: true },
-    { id: "com2", name: "COM2", type: "Serial Port", active: false },
-    { id: "com3", name: "COM3", type: "Serial Port", active: false },
-    { id: "com4", name: "COM4", type: "Serial Port", active: false },
-    { id: "ethernet", name: "Ethernet", type: "TCP/IP", active: false },
-  ])
-  
-  // Function to handle port selection
-  const handlePortSelect = (portId: string) => {
-    setIoPorts(prev => prev.map(port => ({
-      ...port,
-      active: port.id === portId
-    })))
-  }
-  
   // State for Modbus TCP settings
   const [modbusTcpEnabled, setModbusTcpEnabled] = useState(true)
   const [modbusTcpPort, setModbusTcpPort] = useState(502)
   const [modbusTcpMaxUsers, setModbusTcpMaxUsers] = useState(4)
   const [modbusTcpIdleTime, setModbusTcpIdleTime] = useState(120)
   const [modbusRtuOverTcp, setModbusRtuOverTcp] = useState(false)
+  
+  // State for tag selection dialog
+  const [tagSelectionDialogOpen, setTagSelectionDialogOpen] = useState(false)
+  
+  // Mock data for IO tags tree structure
+  const [ioTagsTree, setIoTagsTree] = useState([
+    {
+      id: "port-1",
+      name: "COM1",
+      type: "Serial Port",
+      expanded: false,
+      devices: [
+        {
+          id: "device-1",
+          name: "Crane1",
+          type: "Modbus RTU",
+          expanded: false,
+          tags: [
+            { id: "tag-1", name: "Temperature", dataType: "Float", address: "40001" },
+            { id: "tag-2", name: "Pressure", dataType: "Float", address: "40003" },
+            { id: "tag-3", name: "Speed", dataType: "Int16", address: "40005" }
+          ]
+        }
+      ]
+    }
+  ])
   
   // State for Modbus RTU settings
   const [modbusRtuEnabled, setModbusRtuEnabled] = useState(false)
@@ -115,20 +118,7 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
       id: "device1",
       deviceId: 1,
       name: "Energy Meter",
-      tags: [
-        { id: "tag1", name: "Voltage", tagType: "Input Register", address: "30001", modbusAddress: "0", dataType: "Float", littleEndian: true, reverseWord: false },
-        { id: "tag2", name: "Current", tagType: "Input Register", address: "30003", modbusAddress: "2", dataType: "Float", littleEndian: true, reverseWord: false },
-        { id: "tag3", name: "Power", tagType: "Input Register", address: "30005", modbusAddress: "4", dataType: "Float", littleEndian: true, reverseWord: false },
-      ]
-    },
-    {
-      id: "device2",
-      deviceId: 2,
-      name: "PLC Controller",
-      tags: [
-        { id: "tag4", name: "Status", tagType: "Coil", address: "00001", modbusAddress: "0", dataType: "Boolean", littleEndian: false, reverseWord: false },
-        { id: "tag5", name: "Mode", tagType: "Holding Register", address: "40001", modbusAddress: "0", dataType: "Int16", littleEndian: true, reverseWord: false },
-      ]
+      tags: []
     }
   ])
   
@@ -220,31 +210,60 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
   }
   
   const addNewTag = () => {
-    if (!selectedDevice) return
-    
-    const newTag: ModbusTag = {
-      id: `tag-${Date.now()}`,
-      name: `New_Tag_${selectedDevice.tags.length + 1}`,
-      tagType: "Holding Register",
-      address: "40001",
-      modbusAddress: "40001",
-      dataType: "Float",
-      littleEndian: true,
-      reverseWord: false
+    // Open the tag selection dialog instead of directly adding a tag
+    setTagSelectionDialogOpen(true)
+  }
+  
+  // Toggle expansion of a port in the tree
+  const togglePortExpansion = (portId: string) => {
+    setIoTagsTree(prev => prev.map(port => {
+      if (port.id === portId) {
+        return { ...port, expanded: !port.expanded }
+      }
+      return port
+    }))
+  }
+  
+  // Toggle expansion of a device in the tree
+  const toggleDeviceExpansion = (portId: string, deviceId: string) => {
+    setIoTagsTree(prev => prev.map(port => {
+      if (port.id === portId) {
+        const updatedDevices = port.devices.map(device => {
+          if (device.id === deviceId) {
+            return { ...device, expanded: !device.expanded }
+          }
+          return device
+        })
+        return { ...port, devices: updatedDevices }
+      }
+      return port
+    }))
+  }
+  
+  // Select a tag from the tree and add it to the current device
+  const selectTagFromTree = (tag: any, deviceName: string, portName: string) => {
+    if (selectedDevice) {
+      const newTag = {
+        id: `tag-${Date.now()}`,
+        name: `${deviceName}.${tag.name}`,
+        tagType: "Input Register",
+        address: tag.address,
+        modbusAddress: tag.address,
+        dataType: tag.dataType,
+        littleEndian: false,
+        reverseWord: false
+      }
+      
+      const updatedTags = [...selectedDevice.tags, newTag]
+      const updatedDevice = { ...selectedDevice, tags: updatedTags }
+      setSelectedDevice(updatedDevice)
+      setDevices(prev => prev.map(d => d.id === updatedDevice.id ? updatedDevice : d))
+      setTagSelectionDialogOpen(false)
+      
+      toast.success(`Tag '${newTag.name}' has been added from ${deviceName}.`)
+    } else {
+      toast.error("Please select a device first.")
     }
-    
-    // Update the selected device with the new tag
-    const updatedDevice = {
-      ...selectedDevice,
-      tags: [...selectedDevice.tags, newTag]
-    }
-    
-    // Update the devices list
-    setDevices(prev => prev.map(d => 
-      d.id === updatedDevice.id ? updatedDevice : d
-    ))
-    
-    setSelectedDevice(updatedDevice)
   }
   
   const deleteTag = (tagId: string) => {
@@ -264,6 +283,8 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
     setSelectedDevice(updatedDevice)
   }
   
+
+
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit as any)} className="space-y-6">
@@ -540,24 +561,9 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {/* Configuration Tabs */}
-                <div className="flex items-center space-x-2 overflow-x-auto pb-2">
-                  {configTabs.map((tab) => (
-                    <div 
-                      key={tab.id}
-                      onClick={() => handleTabChange(tab.id)}
-                      className={`cursor-pointer rounded-md px-3 py-2 text-sm font-medium ${tab.active ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'}`}
-                    >
-                      {tab.name}
-                    </div>
-                  ))}
-                  <Button variant="outline" size="sm" className="h-9 px-2">
-                    <Plus className="h-4 w-4" />
-                  </Button>
-                </div>
 
                 {/* Modbus TCP Settings */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <Card>
                     <CardHeader className="pb-2">
                       <div className="flex items-center justify-between">
@@ -676,7 +682,7 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
                               </Select>
                             </div>
                           </div>
-                          <div className="grid grid-cols-3 gap-3">
+                          <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 gap-3">
                             <div className="space-y-1">
                               <Label htmlFor="rtu-databit">Data Bit</Label>
                               <Select 
@@ -733,73 +739,52 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
                   </Card>
                 </div>
 
-                {/* Device Configuration */}
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base">Device Configuration</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-1">
-                          <Label htmlFor="device-id">Device ID</Label>
-                          <Select 
-                            value={selectedDeviceId.toString()} 
-                            onValueChange={(v) => handleDeviceIdChange(parseInt(v))}
-                          >
-                            <SelectTrigger id="device-id">
-                              <SelectValue placeholder="Select device ID" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {devices.map(device => (
-                                <SelectItem key={device.id} value={device.deviceId.toString()}>
-                                  {device.deviceId} - {device.name}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-1">
-                          <Label htmlFor="device-name">Device Name</Label>
-                          <Input 
-                            id="device-name" 
-                            value={selectedDevice?.name || ''} 
-                            onChange={(e) => {
-                              if (selectedDevice) {
-                                const updatedDevice = { ...selectedDevice, name: e.target.value }
-                                setSelectedDevice(updatedDevice)
-                                setDevices(prev => prev.map(d => d.id === updatedDevice.id ? updatedDevice : d))
-                              }
-                            }} 
-                            placeholder="Device name" 
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
                 {/* Tag Table */}
                 <Card>
                   <CardHeader className="pb-2">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-base">Tag Configuration</CardTitle>
-                      <Button variant="outline" size="sm" onClick={addNewTag}>
-                        <Plus className="h-4 w-4 mr-1" /> Add Tag
+                    <CardTitle className="text-base">Tag Configuration</CardTitle>
+                  </CardHeader>
+                  <div className="px-2 sm:px-4 md:px-6 pb-2">
+                    <div className="flex flex-wrap items-center gap-2 overflow-x-auto pb-2 border-b mb-2">
+                      {devices.map((device) => (
+                        <Badge 
+                          key={device.id}
+                          variant={selectedDevice?.id === device.id ? "default" : "outline"} 
+                          className="cursor-pointer"
+                          onClick={() => {
+                            setSelectedDevice(device);
+                            setSelectedDeviceId(device.deviceId);
+                          }}
+                        >
+                          Device {device.deviceId}: {device.name}
+                        </Badge>
+                      ))}
+                      <Button variant="ghost" size="sm" className="h-7 px-2" onClick={() => {
+                        const newDevice = {
+                          id: `device-${Date.now()}`,
+                          deviceId: devices.length + 1,
+                          name: `Device ${devices.length + 1}`,
+                          tags: []
+                        };
+                        setDevices([...devices, newDevice]);
+                        setSelectedDevice(newDevice);
+                        setSelectedDeviceId(newDevice.deviceId);
+                      }}>
+                        <Plus className="h-4 w-4" />
                       </Button>
                     </div>
-                  </CardHeader>
+                  </div>
                   <CardContent>
-                    <div className="rounded-md border">
-                      <Table>
+                    <div className="rounded-md border overflow-x-auto">
+                      <Table className="min-w-[800px]">
                         <TableHeader>
                           <TableRow>
-                            <TableHead className="w-[100px]">Name</TableHead>
-                            <TableHead>Tag Type</TableHead>
-                            <TableHead>Address</TableHead>
-                            <TableHead>Data Type</TableHead>
-                            <TableHead className="w-[100px]">Options</TableHead>
-                            <TableHead className="w-[70px]">Actions</TableHead>
+                            <TableHead className="w-[180px]">Name</TableHead>
+                            <TableHead className="w-[150px]">Tag Type</TableHead>
+                            <TableHead className="w-[120px]">Address</TableHead>
+                            <TableHead className="w-[120px]">Data Type</TableHead>
+                            <TableHead className="w-[150px]">Options</TableHead>
+                            <TableHead className="w-[80px]">Actions</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -818,7 +803,7 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
                                       setDevices(prev => prev.map(d => d.id === updatedDevice.id ? updatedDevice : d))
                                     }
                                   }} 
-                                  className="h-8" 
+                                  className="h-8 w-full" 
                                 />
                               </TableCell>
                               <TableCell>
@@ -880,14 +865,18 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
                                     <SelectValue />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    <SelectItem value="Boolean">Boolean</SelectItem>
-                                    <SelectItem value="Int16">Int16</SelectItem>
-                                    <SelectItem value="UInt16">UInt16</SelectItem>
-                                    <SelectItem value="Int32">Int32</SelectItem>
-                                    <SelectItem value="UInt32">UInt32</SelectItem>
-                                    <SelectItem value="Float">Float</SelectItem>
-                                    <SelectItem value="Double">Double</SelectItem>
-                                    <SelectItem value="String">String</SelectItem>
+                                    <SelectItem value="UInt16">Unsigned Integer (16 bits)</SelectItem>
+                                    <SelectItem value="UInt32">Unsigned Integer (32 bits)</SelectItem>
+                                    <SelectItem value="UInt64">Unsigned Integer (64 bits)</SelectItem>
+                                    <SelectItem value="Int16">Signed Integer (16 bits)</SelectItem>
+                                    <SelectItem value="Int32">Signed Integer (32 bits)</SelectItem>
+                                    <SelectItem value="Int64">Signed Integer (64 bits)</SelectItem>
+                                    <SelectItem value="Float">Float (32 bits)</SelectItem>
+                                    <SelectItem value="Double">Double (64 bits)</SelectItem>
+                                    <SelectItem value="BCD16">BCD (16 bits)</SelectItem>
+                                    <SelectItem value="BCD32">BCD (32 bits)</SelectItem>
+                                    <SelectItem value="BCD64">BCD (64 bits)</SelectItem>
+                                    <SelectItem value="Text">Text</SelectItem>
                                   </SelectContent>
                                 </Select>
                               </TableCell>
@@ -944,6 +933,11 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
                         </TableBody>
                       </Table>
                     </div>
+                    <div className="mt-4">
+                      <Button variant="outline" size="sm" onClick={addNewTag}>
+                        <Plus className="h-4 w-4 mr-1" /> Add Tag
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
               </div>
@@ -967,6 +961,136 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
 
         {/* Save button moved above the advanced configuration section */}
       </form>
+      
+      {/* Tag Selection Dialog */}
+      <Dialog open={tagSelectionDialogOpen} onOpenChange={setTagSelectionDialogOpen}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Select Tag</DialogTitle>
+            <DialogDescription>
+              Browse the IO tag structure and select a tag to add to the current device
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-auto">
+            <div className="space-y-4 p-2">
+              <div className="grid grid-cols-1 sm:grid-cols-5 gap-4">
+                <Card className="sm:col-span-1 h-auto overflow-auto">
+                  <CardHeader className="py-3">
+                    <CardTitle className="text-sm font-medium">Tag Categories</CardTitle>
+                  </CardHeader>
+                  <CardContent className="py-0">
+                    <div className="space-y-1">
+                      <div className="flex items-center px-2 py-1.5 rounded-md bg-primary text-primary-foreground text-sm">
+                        <Tag className="h-4 w-4 mr-2" />
+                        IO Tags
+                      </div>
+                      <div className="flex items-center px-2 py-1.5 text-sm text-muted-foreground">
+                        <UserCircle className="h-4 w-4 mr-2" />
+                        User Tags
+                      </div>
+                      <div className="flex items-center px-2 py-1.5 text-sm text-muted-foreground">
+                        <FileDigit className="h-4 w-4 mr-2" />
+                        Calculation Tags
+                      </div>
+                      <div className="flex items-center px-2 py-1.5 text-sm text-muted-foreground">
+                        <BarChart className="h-4 w-4 mr-2" />
+                        Stats Tags
+                      </div>
+                      <div className="flex items-center px-2 py-1.5 text-sm text-muted-foreground">
+                        <Cog className="h-4 w-4 mr-2" />
+                        System Tags
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+                
+                <Card className="sm:col-span-4 h-auto overflow-auto">
+                  <CardHeader className="py-3">
+                    <CardTitle className="text-sm font-medium">IO Tags</CardTitle>
+                  </CardHeader>
+                  <CardContent className="py-0">
+                    <div className="space-y-2">
+                      {ioTagsTree.map(port => (
+                        <div key={port.id} className="border rounded-md">
+                          <div 
+                            className="flex items-center p-2 cursor-pointer hover:bg-muted/50"
+                            onClick={() => togglePortExpansion(port.id)}
+                          >
+                            {port.expanded ? 
+                              <ChevronDown className="h-4 w-4 mr-1" /> : 
+                              <ChevronRight className="h-4 w-4 mr-1" />
+                            }
+                            <Server className="h-4 w-4 mr-2 text-muted-foreground" />
+                            <span className="font-medium">{port.name}</span>
+                            <span className="text-xs text-muted-foreground ml-2">({port.type})</span>
+                          </div>
+                          
+                          {port.expanded && (
+                            <div className="pl-6 pr-2 pb-2 space-y-2">
+                              {port.devices.map(device => (
+                                <div key={device.id} className="border rounded-md">
+                                  <div 
+                                    className="flex items-center p-2 cursor-pointer hover:bg-muted/50"
+                                    onClick={() => toggleDeviceExpansion(port.id, device.id)}
+                                  >
+                                    {device.expanded ? 
+                                      <ChevronDown className="h-4 w-4 mr-1" /> : 
+                                      <ChevronRight className="h-4 w-4 mr-1" />
+                                    }
+                                    <Cpu className="h-4 w-4 mr-2 text-muted-foreground" />
+                                    <span className="font-medium">{device.name}</span>
+                                    <span className="text-xs text-muted-foreground ml-2">({device.type})</span>
+                                  </div>
+                                  
+                                  {device.expanded && (
+                                    <div className="pl-6 pr-2 pb-2">
+                                      <Table>
+                                        <TableHeader>
+                                          <TableRow>
+                                            <TableHead>Name</TableHead>
+                                            <TableHead>Data Type</TableHead>
+                                            <TableHead>Address</TableHead>
+                                            <TableHead></TableHead>
+                                          </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                          {device.tags.map(tag => (
+                                            <TableRow key={tag.id}>
+                                              <TableCell>{tag.name}</TableCell>
+                                              <TableCell>{tag.dataType}</TableCell>
+                                              <TableCell>{tag.address}</TableCell>
+                                              <TableCell>
+                                                <Button 
+                                                  variant="ghost" 
+                                                  size="sm"
+                                                  onClick={() => selectTagFromTree(tag, device.name, port.name)}
+                                                >
+                                                  Select
+                                                </Button>
+                                              </TableCell>
+                                            </TableRow>
+                                          ))}
+                                        </TableBody>
+                                      </Table>
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          </div>
+          <DialogFooter className="border-t pt-4 mt-4">
+            <Button variant="outline" onClick={() => setTagSelectionDialogOpen(false)}>Cancel</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* If separate, render advanced config outside the form */}
       {form.watch("enabled") && separateAdvancedConfig && (
@@ -976,27 +1100,13 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {/* IO Tags Ports Navigation */}
-              <div className="flex items-center space-x-2 overflow-x-auto pb-2 border-b mb-4">
-                {ioPorts.map(port => (
-                  <Badge 
-                    key={port.id}
-                    variant={port.active ? "default" : "outline"} 
-                    className="cursor-pointer"
-                    onClick={() => handlePortSelect(port.id)}
-                  >
-                    {port.name} ({port.type})
-                  </Badge>
-                ))}
-              </div>
-
               {/* Modbus TCP and RTU Configuration */}
               <Card>
                 <CardHeader className="py-4">
                   <CardTitle className="text-sm font-medium">Modbus Configuration</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-8">
                     {/* Modbus TCP Configuration (Left Side) */}
                     <div className="space-y-4">
                       <h3 className="text-sm font-medium">Modbus TCP Configuration</h3>
