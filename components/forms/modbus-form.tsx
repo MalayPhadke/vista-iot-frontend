@@ -12,8 +12,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter, CardDescription }
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useConfigStore } from "@/lib/stores/configuration-store"
-import { useState, useEffect } from "react"
-import { RefreshCw, Plus, X, FileSpreadsheet, Download, Upload, Check, Trash2, ChevronDown, ChevronRight, Server, Cpu, Tag, UserCircle, FileDigit, BarChart, Cog } from "lucide-react"
+import React, { useState, useEffect, createContext, useContext } from "react"
+import { RefreshCw, Plus, X, FileSpreadsheet, Download, Upload, Check, Trash2, ChevronDown, ChevronRight, Server, Cpu, Tag, UserCircle, FileDigit, BarChart, Cog, Terminal } from "lucide-react"
 import { toast } from "sonner"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -42,6 +42,45 @@ const modbusFormSchema = z.object({
 
 type ModbusFormValues = z.infer<typeof modbusFormSchema>
 
+// Define the IO Tag interface
+interface IOTag {
+  id: string;
+  name: string;
+  dataType: string;
+  address: string;
+  description: string;
+}
+
+// Define the IO Port interface
+interface Port {
+  id: string;
+  name: string;
+  type: string;
+  enabled: boolean;
+  devices: Device[];
+  description?: string;
+  scanTime?: number;
+  timeOut?: number;
+  retryCount?: number;
+  autoRecoverTime?: number;
+  scanMode?: string;
+  serialSettings?: any;
+}
+
+// Define the Device interface for IO Ports
+interface Device {
+  id: string;
+  name: string;
+  type: string;
+  enabled: boolean;
+  unitNumber?: number;
+  description?: string;
+  tagWriteType?: string;
+  addDeviceNameAsPrefix?: boolean;
+  extensionProperties?: any;
+  tags?: IOTag[];
+}
+
 // Define the tag interface
 interface ModbusTag {
   id: string;
@@ -66,6 +105,17 @@ interface ModbusFormProps {
   separateAdvancedConfig?: boolean;
 }
 
+// Global IO ports context
+export interface IOPortsContextType {
+  ioPorts: Port[];
+  setIoPorts: React.Dispatch<React.SetStateAction<Port[]>>;
+}
+
+// Import this context if it exists, otherwise create it
+// In a real application, you'd have this defined in a shared context file
+const IOPortsContext = createContext<IOPortsContextType>({ioPorts: [], setIoPorts: () => {}});
+export const useIOPorts = () => useContext(IOPortsContext);
+
 export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) {
   const { updateConfig, getConfig } = useConfigStore()
   const [isSaving, setIsSaving] = useState(false)
@@ -81,28 +131,11 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
   // State for tag selection dialog
   const [tagSelectionDialogOpen, setTagSelectionDialogOpen] = useState(false)
   
-  // Mock data for IO tags tree structure
-  const [ioTagsTree, setIoTagsTree] = useState([
-    {
-      id: "port-1",
-      name: "COM1",
-      type: "Serial Port",
-      expanded: false,
-      devices: [
-        {
-          id: "device-1",
-          name: "Crane1",
-          type: "Modbus RTU",
-          expanded: false,
-          tags: [
-            { id: "tag-1", name: "Temperature", dataType: "Float", address: "40001" },
-            { id: "tag-2", name: "Pressure", dataType: "Float", address: "40003" },
-            { id: "tag-3", name: "Speed", dataType: "Int16", address: "40005" }
-          ]
-        }
-      ]
-    }
-  ])
+  // IO tags tree structure - For this POC component, we'll use the global app state
+  // In a real application, this would come from a context or state management solution
+  const [ioPorts, setIoPorts] = useState<Port[]>([])
+  const [expandedPorts, setExpandedPorts] = useState<string[]>([])
+  const [expandedDevices, setExpandedDevices] = useState<string[]>([])
   
   // State for Modbus RTU settings
   const [modbusRtuEnabled, setModbusRtuEnabled] = useState(false)
@@ -147,28 +180,93 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
   })
 
   useEffect(() => {
+    const fetchIoPorts = async () => {
+      try {
+        const storedPorts = localStorage.getItem('io_ports_data')
+        if (storedPorts) {
+          setIoPorts(JSON.parse(storedPorts))
+        }
+        
+        const handleIoPortsUpdate = (event) => {
+          if (event.key === 'io_ports_data') {
+            try {
+              const updatedPorts = JSON.parse(event.newValue)
+              if (updatedPorts) {
+                setIoPorts(updatedPorts)
+              }
+            } catch (error) {
+              console.error('Error parsing updated IO ports data:', error)
+            }
+          }
+        }
+        
+        window.addEventListener('storage', handleIoPortsUpdate)
+        
+        return () => {
+          window.removeEventListener('storage', handleIoPortsUpdate)
+        }
+      } catch (error) {
+        console.error('Error fetching IO ports data:', error)
+      }
+    }
+    
     const config = getConfig()?.protocols?.modbus;
+    
     if (config) {
+      setModbusTcpEnabled(config.tcp?.enabled || false)
+      setModbusTcpPort(config.tcp?.port || 502)
+      setModbusTcpMaxUsers(config.tcp?.max_connections || 4)
+      setModbusTcpIdleTime(config.tcp?.timeout || 120)
+      setModbusRtuOverTcp(config.tcp?.rtu_over_tcp || false)
+      
+      setModbusRtuEnabled(config.rtu?.enabled || false)
+      setModbusRtuPort(config.rtu?.port || "COM1")
+      setModbusRtuBaudRate(config.rtu?.baudrate || 9600)
+      setModbusRtuDataBit(config.rtu?.data_bits || 8)
+      setModbusRtuStopBit(config.rtu?.stop_bits || 1)
+      setModbusRtuParity(config.rtu?.parity || "none")
+      
       form.reset({
         enabled: config.enabled || false,
-        mode: (config.mode as "tcp" | "rtu") || "tcp",
+        mode: config.mode || "tcp",
         tcp: {
           port: config.tcp?.port || 502,
-          max_connections: config.tcp?.max_connections || 5,
-          timeout: config.tcp?.timeout || 60
+          max_connections: config.tcp?.max_connections || 4,
+          timeout: config.tcp?.timeout || 120
         },
         serial: {
-          port: config.serial?.port || "/dev/ttyUSB0",
-          baudrate: config.serial?.baudrate || 9600,
-          data_bits: config.serial?.data_bits || 8,
-          parity: (config.serial?.parity as "none" | "even" | "odd") || "none",
-          stop_bits: config.serial?.stop_bits || 1
+          port: config.rtu?.port || "COM1",
+          baudrate: config.rtu?.baudrate || 9600,
+          data_bits: config.rtu?.data_bits || 8,
+          parity: config.rtu?.parity || "none",
+          stop_bits: config.rtu?.stop_bits || 1
         },
         slave_id: config.slave_id || 1
-      });
-      setActiveTab((config.mode as "tcp" | "rtu") || "tcp");
+      })
+      
+      setActiveTab(config.mode || "tcp")
     }
-  }, [getConfig, form]);
+    
+    fetchIoPorts()
+    
+    const pollInterval = setInterval(() => {
+      try {
+        const storedPorts = localStorage.getItem('io_ports_data')
+        if (storedPorts) {
+          const parsedPorts = JSON.parse(storedPorts)
+          if (JSON.stringify(parsedPorts) !== JSON.stringify(ioPorts)) {
+            setIoPorts(parsedPorts)
+          }
+        }
+      } catch (error) {
+        console.error('Error in polling IO ports data:', error)
+      }
+    }, 2000)
+    
+    return () => {
+      clearInterval(pollInterval)
+    }
+  }, []);
 
   const onSubmit = async (values: ModbusFormValues) => {
     setIsSaving(true)
@@ -216,74 +314,62 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
   
   // Toggle expansion of a port in the tree
   const togglePortExpansion = (portId: string) => {
-    setIoTagsTree(prev => prev.map(port => {
-      if (port.id === portId) {
-        return { ...port, expanded: !port.expanded }
+    setExpandedPorts(prev => {
+      if (prev.includes(portId)) {
+        return prev.filter(id => id !== portId);
+      } else {
+        return [...prev, portId];
       }
-      return port
-    }))
+    });
   }
   
   // Toggle expansion of a device in the tree
-  const toggleDeviceExpansion = (portId: string, deviceId: string) => {
-    setIoTagsTree(prev => prev.map(port => {
-      if (port.id === portId) {
-        const updatedDevices = port.devices.map(device => {
-          if (device.id === deviceId) {
-            return { ...device, expanded: !device.expanded }
-          }
-          return device
-        })
-        return { ...port, devices: updatedDevices }
+  const toggleDeviceExpansion = (deviceId: string) => {
+    setExpandedDevices(prev => {
+      if (prev.includes(deviceId)) {
+        return prev.filter(id => id !== deviceId);
+      } else {
+        return [...prev, deviceId];
       }
-      return port
-    }))
+    });
   }
   
   // Select a tag from the tree and add it to the current device
-  const selectTagFromTree = (tag: any, deviceName: string, portName: string) => {
+  const selectTagFromTree = (tag: IOTag, deviceName: string, portName: string) => {
+    // Implement logic to add selected tag to the current device's tags
     if (selectedDevice) {
-      const newTag = {
-        id: `tag-${Date.now()}`,
-        name: `${deviceName}.${tag.name}`,
-        tagType: "Input Register",
-        address: tag.address,
+      // Generate a unique ID for the new tag
+      const newTagId = `tag-${Date.now()}`
+      
+      // Create a new tag object
+      const newTag: ModbusTag = {
+        id: newTagId,
+        name: `${deviceName}:${tag.name}`,
+        tagType: "holding", // Default to holding register
+        address: tag.address, // Use the original tag's address
         modbusAddress: tag.address,
-        dataType: tag.dataType,
+        dataType: tag.dataType || "uint16", // Default to uint16
         littleEndian: false,
         reverseWord: false
       }
       
-      const updatedTags = [...selectedDevice.tags, newTag]
-      const updatedDevice = { ...selectedDevice, tags: updatedTags }
-      setSelectedDevice(updatedDevice)
-      setDevices(prev => prev.map(d => d.id === updatedDevice.id ? updatedDevice : d))
-      setTagSelectionDialogOpen(false)
+      // Update the selected device with the new tag
+      const updatedDevice = {
+        ...selectedDevice,
+        tags: [...selectedDevice.tags, newTag]
+      }
       
-      toast.success(`Tag '${newTag.name}' has been added from ${deviceName}.`)
-    } else {
-      toast.error("Please select a device first.")
+      setSelectedDevice(updatedDevice)
+      
+      // Update the devices array
+      setDevices(prev => prev.map(device => 
+        device.id === selectedDevice.id ? updatedDevice : device
+      ))
+      
+      // Close the tag selection dialog
+      setTagSelectionDialogOpen(false)
     }
   }
-  
-  const deleteTag = (tagId: string) => {
-    if (!selectedDevice) return
-    
-    // Update the selected device by removing the tag
-    const updatedDevice = {
-      ...selectedDevice,
-      tags: selectedDevice.tags.filter(tag => tag.id !== tagId)
-    }
-    
-    // Update the devices list
-    setDevices(prev => prev.map(d => 
-      d.id === updatedDevice.id ? updatedDevice : d
-    ))
-    
-    setSelectedDevice(updatedDevice)
-  }
-  
-
 
   return (
     <Form {...form}>
@@ -563,10 +649,10 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
               <div className="space-y-4">
 
                 {/* Modbus TCP Settings */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                   <Card>
                     <CardHeader className="pb-2">
-                      <div className="flex items-center justify-between">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                         <CardTitle className="text-base">Modbus TCP Settings</CardTitle>
                         <div className="flex items-center space-x-2">
                           <span className="text-xs">Enable</span>
@@ -580,7 +666,7 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
                     <CardContent>
                       {modbusTcpEnabled && (
                         <div className="space-y-3">
-                          <div className="grid grid-cols-2 gap-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div className="space-y-1">
                               <Label htmlFor="tcp-port">Port</Label>
                               <Input 
@@ -602,7 +688,7 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
                               />
                             </div>
                           </div>
-                          <div className="grid grid-cols-2 gap-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div className="space-y-1">
                               <Label htmlFor="tcp-idle-time">Idle Time (s)</Label>
                               <Input 
@@ -631,7 +717,7 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
                   {/* Modbus RTU Settings */}
                   <Card>
                     <CardHeader className="pb-2">
-                      <div className="flex items-center justify-between">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                         <CardTitle className="text-base">Modbus RTU Settings</CardTitle>
                         <div className="flex items-center space-x-2">
                           <span className="text-xs">Enable</span>
@@ -645,7 +731,7 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
                     <CardContent>
                       {modbusRtuEnabled && (
                         <div className="space-y-3">
-                          <div className="grid grid-cols-2 gap-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                             <div className="space-y-1">
                               <Label htmlFor="rtu-port">Port</Label>
                               <Select 
@@ -664,51 +750,48 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
                               </Select>
                             </div>
                             <div className="space-y-1">
-                              <Label htmlFor="rtu-baudrate">Baud Rate</Label>
+                              <Label htmlFor="rtu-baud-rate">Baud Rate</Label>
                               <Select 
                                 value={modbusRtuBaudRate.toString()} 
-                                onValueChange={(v) => setModbusRtuBaudRate(parseInt(v))}
+                                onValueChange={(value) => setModbusRtuBaudRate(parseInt(value))}
                               >
-                                <SelectTrigger id="rtu-baudrate">
+                                <SelectTrigger id="rtu-baud-rate">
                                   <SelectValue placeholder="Select baud rate" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {[1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200].map(rate => (
-                                    <SelectItem key={rate} value={rate.toString()}>
-                                      {rate}
-                                    </SelectItem>
-                                  ))}
+                                  <SelectItem value="9600">9600</SelectItem>
+                                  <SelectItem value="19200">19200</SelectItem>
+                                  <SelectItem value="38400">38400</SelectItem>
+                                  <SelectItem value="57600">57600</SelectItem>
+                                  <SelectItem value="115200">115200</SelectItem>
                                 </SelectContent>
                               </Select>
                             </div>
                           </div>
-                          <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 gap-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <div className="space-y-1">
-                              <Label htmlFor="rtu-databit">Data Bit</Label>
+                              <Label htmlFor="rtu-data-bit">Data Bits</Label>
                               <Select 
                                 value={modbusRtuDataBit.toString()} 
-                                onValueChange={(v) => setModbusRtuDataBit(parseInt(v))}
+                                onValueChange={(value) => setModbusRtuDataBit(parseInt(value))}
                               >
-                                <SelectTrigger id="rtu-databit">
-                                  <SelectValue placeholder="Data bit" />
+                                <SelectTrigger id="rtu-data-bit">
+                                  <SelectValue placeholder="Data bits" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {[5, 6, 7, 8].map(bit => (
-                                    <SelectItem key={bit} value={bit.toString()}>
-                                      {bit}
-                                    </SelectItem>
-                                  ))}
+                                  <SelectItem value="7">7</SelectItem>
+                                  <SelectItem value="8">8</SelectItem>
                                 </SelectContent>
                               </Select>
                             </div>
                             <div className="space-y-1">
-                              <Label htmlFor="rtu-stopbit">Stop Bit</Label>
+                              <Label htmlFor="rtu-stop-bit">Stop Bits</Label>
                               <Select 
                                 value={modbusRtuStopBit.toString()} 
-                                onValueChange={(v) => setModbusRtuStopBit(parseInt(v))}
+                                onValueChange={(value) => setModbusRtuStopBit(parseInt(value))}
                               >
-                                <SelectTrigger id="rtu-stopbit">
-                                  <SelectValue placeholder="Stop bit" />
+                                <SelectTrigger id="rtu-stop-bit">
+                                  <SelectValue placeholder="Stop bits" />
                                 </SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value="1">1</SelectItem>
@@ -775,7 +858,186 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
                     </div>
                   </div>
                   <CardContent>
-                    <div className="rounded-md border overflow-x-auto">
+                    {/* Mobile view: Card-based tag list */}
+                    <div className="block md:hidden space-y-4">
+                      {selectedDevice?.tags?.map((tag) => (
+                        <Card key={tag.id} className="p-4 border">
+                          <div className="flex justify-between items-start mb-3">
+                            <div className="w-full">
+                              <Label htmlFor={`tag-name-${tag.id}`} className="text-xs mb-1 block">Name</Label>
+                              <Input 
+                                id={`tag-name-${tag.id}`}
+                                value={tag.name} 
+                                onChange={(e) => {
+                                  if (selectedDevice) {
+                                    const updatedTags = selectedDevice.tags.map(t => 
+                                      t.id === tag.id ? { ...t, name: e.target.value } : t
+                                    )
+                                    const updatedDevice = { ...selectedDevice, tags: updatedTags }
+                                    setSelectedDevice(updatedDevice)
+                                    setDevices(prev => prev.map(d => d.id === updatedDevice.id ? updatedDevice : d))
+                                  }
+                                }} 
+                                className="h-8 w-full" 
+                              />
+                            </div>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              onClick={() => {
+                                if (selectedDevice) {
+                                  const updatedDevice = {
+                                    ...selectedDevice,
+                                    tags: selectedDevice.tags.filter(t => t.id !== tag.id)
+                                  }
+                                  setSelectedDevice(updatedDevice)
+                                  setDevices(prev => prev.map(d => 
+                                    d.id === updatedDevice.id ? updatedDevice : d
+                                  ))
+                                }
+                              }}
+                              className="h-8 w-8 ml-2"
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
+                          
+                          <div className="grid grid-cols-2 gap-3 mb-3">
+                            <div>
+                              <Label htmlFor={`tag-type-${tag.id}`} className="text-xs mb-1 block">Tag Type</Label>
+                              <div className="relative">
+                                <select
+                                  id={`tag-type-${tag.id}`}
+                                  className="w-full h-8 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                                  value={tag.tagType || ""}
+                                  onChange={(e) => {
+                                    if (selectedDevice) {
+                                      const value = e.target.value;
+                                      const updatedTags = selectedDevice.tags.map(t => 
+                                        t.id === tag.id ? { ...t, tagType: value } : t
+                                      )
+                                      const updatedDevice = { ...selectedDevice, tags: updatedTags }
+                                      setSelectedDevice(updatedDevice)
+                                      setDevices(prev => prev.map(d => d.id === updatedDevice.id ? updatedDevice : d))
+                                    }
+                                  }}
+                                >
+                                  <option value="" disabled>Select type</option>
+                                  <option value="coil">Coil</option>
+                                  <option value="discrete_input">Discrete Input</option>
+                                  <option value="holding_register">Holding Register</option>
+                                  <option value="input_register">Input Register</option>
+                                </select>
+                                <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
+                                  <ChevronDown className="h-4 w-4 opacity-50" />
+                                </div>
+                              </div>
+                            </div>
+                            
+                            <div>
+                              <Label htmlFor={`tag-address-${tag.id}`} className="text-xs mb-1 block">Address</Label>
+                              <Input 
+                                id={`tag-address-${tag.id}`}
+                                value={tag.address} 
+                                onChange={(e) => {
+                                  if (selectedDevice) {
+                                    const updatedTags = selectedDevice.tags.map(t => 
+                                      t.id === tag.id ? { ...t, address: e.target.value } : t
+                                    )
+                                    const updatedDevice = { ...selectedDevice, tags: updatedTags }
+                                    setSelectedDevice(updatedDevice)
+                                    setDevices(prev => prev.map(d => d.id === updatedDevice.id ? updatedDevice : d))
+                                  }
+                                }} 
+                                className="h-8 w-full" 
+                              />
+                            </div>
+                          </div>
+                          
+                          <div className="grid grid-cols-2 gap-3 mb-3">
+                            <div>
+                              <Label htmlFor={`tag-data-type-${tag.id}`} className="text-xs mb-1 block">Data Type</Label>
+                              <div className="relative">
+                                <select
+                                  id={`tag-data-type-${tag.id}`}
+                                  className="w-full h-8 rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                                  value={tag.dataType || ""}
+                                  onChange={(e) => {
+                                    if (selectedDevice) {
+                                      const value = e.target.value;
+                                      const updatedTags = selectedDevice.tags.map(t => 
+                                        t.id === tag.id ? { ...t, dataType: value } : t
+                                      )
+                                      const updatedDevice = { ...selectedDevice, tags: updatedTags }
+                                      setSelectedDevice(updatedDevice)
+                                      setDevices(prev => prev.map(d => d.id === updatedDevice.id ? updatedDevice : d))
+                                    }
+                                  }}
+                                >
+                                  <option value="" disabled>Select data type</option>
+                                  <option value="uint16">UINT16</option>
+                                  <option value="int16">INT16</option>
+                                  <option value="uint32">UINT32</option>
+                                  <option value="int32">INT32</option>
+                                  <option value="float32">FLOAT32</option>
+                                </select>
+                                <div className="absolute inset-y-0 right-0 flex items-center pr-2 pointer-events-none">
+                                  <ChevronDown className="h-4 w-4 opacity-50" />
+                                </div>
+                              </div>
+                            </div>
+                            
+                            <div>
+                              <div className="flex flex-col space-y-1">
+                                <div className="flex items-center space-x-2">
+                                  <Checkbox 
+                                    id={`swap-bytes-${tag.id}`} 
+                                    checked={tag.swapBytes} 
+                                    onCheckedChange={(checked) => {
+                                      if (selectedDevice) {
+                                        const updatedTags = selectedDevice.tags.map(t => 
+                                          t.id === tag.id ? { ...t, swapBytes: !!checked } : t
+                                        )
+                                        const updatedDevice = { ...selectedDevice, tags: updatedTags }
+                                        setSelectedDevice(updatedDevice)
+                                        setDevices(prev => prev.map(d => d.id === updatedDevice.id ? updatedDevice : d))
+                                      }
+                                    }} 
+                                  />
+                                  <Label htmlFor={`swap-bytes-${tag.id}`} className="text-xs">Swap Bytes</Label>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  <Checkbox 
+                                    id={`reverse-word-${tag.id}`} 
+                                    checked={tag.reverseWord} 
+                                    onCheckedChange={(checked) => {
+                                      if (selectedDevice) {
+                                        const updatedTags = selectedDevice.tags.map(t => 
+                                          t.id === tag.id ? { ...t, reverseWord: !!checked } : t
+                                        )
+                                        const updatedDevice = { ...selectedDevice, tags: updatedTags }
+                                        setSelectedDevice(updatedDevice)
+                                        setDevices(prev => prev.map(d => d.id === updatedDevice.id ? updatedDevice : d))
+                                      }
+                                    }} 
+                                  />
+                                  <Label htmlFor={`reverse-word-${tag.id}`} className="text-xs">Reverse Word</Label>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </Card>
+                      ))}
+                      
+                      <div className="mt-4">
+                        <Button variant="outline" size="sm" onClick={addNewTag}>
+                          <Plus className="h-4 w-4 mr-1" /> Add Tag
+                        </Button>
+                      </div>
+                    </div>
+                    
+                    {/* Desktop view: Table-based tag list */}
+                    <div className="hidden md:block rounded-md border overflow-x-auto">
                       <Table className="min-w-[800px]">
                         <TableHeader>
                           <TableRow>
@@ -788,7 +1050,7 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {selectedDevice?.tags.map((tag) => (
+                          {selectedDevice?.tags?.map((tag) => (
                             <TableRow key={tag.id}>
                               <TableCell>
                                 <Input 
@@ -922,7 +1184,18 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
                                 <Button 
                                   variant="ghost" 
                                   size="icon" 
-                                  onClick={() => deleteTag(tag.id)}
+                                  onClick={() => {
+                                    if (selectedDevice) {
+                                      const updatedDevice = {
+                                        ...selectedDevice,
+                                        tags: selectedDevice.tags.filter(t => t.id !== tag.id)
+                                      }
+                                      setSelectedDevice(updatedDevice)
+                                      setDevices(prev => prev.map(d => 
+                                        d.id === updatedDevice.id ? updatedDevice : d
+                                      ))
+                                    }
+                                  }}
                                   className="h-8 w-8"
                                 >
                                   <Trash2 className="h-4 w-4 text-destructive" />
@@ -942,16 +1215,16 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
                 </Card>
               </div>
             </CardContent>
-            <CardFooter className="flex justify-between">
-              <Button variant="outline">Discard Changes</Button>
-              <div className="flex space-x-2">
-                <Button variant="outline">
+            <CardFooter className="flex flex-col sm:flex-row justify-between gap-4">
+              <Button variant="outline" className="w-full sm:w-auto">Discard Changes</Button>
+              <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+                <Button variant="outline" className="w-full sm:w-auto">
                   <Download className="h-4 w-4 mr-1" /> Export
                 </Button>
-                <Button variant="outline">
+                <Button variant="outline" className="w-full sm:w-auto">
                   <Upload className="h-4 w-4 mr-1" /> Import
                 </Button>
-                <Button>
+                <Button className="w-full sm:w-auto">
                   <Check className="h-4 w-4 mr-1" /> Apply Changes
                 </Button>
               </div>
@@ -964,7 +1237,7 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
       
       {/* Tag Selection Dialog */}
       <Dialog open={tagSelectionDialogOpen} onOpenChange={setTagSelectionDialogOpen}>
-        <DialogContent className="max-w-3xl max-h-[80vh] overflow-hidden flex flex-col">
+        <DialogContent className="max-w-[95vw] sm:max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle>Select Tag</DialogTitle>
             <DialogDescription>
@@ -973,7 +1246,113 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
           </DialogHeader>
           <div className="flex-1 overflow-auto">
             <div className="space-y-4 p-2">
-              <div className="grid grid-cols-1 sm:grid-cols-5 gap-4">
+              {/* Mobile view: Tabs for categories */}
+              <div className="block sm:hidden">
+                <Tabs defaultValue="io-tags" className="w-full">
+                  <TabsList className="grid grid-cols-5 w-full">
+                    <TabsTrigger value="io-tags" className="flex items-center justify-center">
+                      <Tag className="h-4 w-4" />
+                    </TabsTrigger>
+                    <TabsTrigger value="user-tags" className="flex items-center justify-center">
+                      <UserCircle className="h-4 w-4" />
+                    </TabsTrigger>
+                    <TabsTrigger value="calc-tags" className="flex items-center justify-center">
+                      <FileDigit className="h-4 w-4" />
+                    </TabsTrigger>
+                    <TabsTrigger value="stats-tags" className="flex items-center justify-center">
+                      <BarChart className="h-4 w-4" />
+                    </TabsTrigger>
+                    <TabsTrigger value="system-tags" className="flex items-center justify-center">
+                      <Cog className="h-4 w-4" />
+                    </TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="io-tags" className="mt-2">
+                    <Card>
+                      <CardHeader className="py-3">
+                        <CardTitle className="text-sm font-medium">IO Tags</CardTitle>
+                      </CardHeader>
+                      <CardContent className="py-0 px-2">
+                        <div className="space-y-2">
+                          {ioPorts.map(port => (
+                            <div key={port.id} className="border rounded-md">
+                              <div 
+                                className="flex items-center p-2 cursor-pointer hover:bg-muted/50"
+                                onClick={() => togglePortExpansion(port.id)}
+                              >
+                                {expandedPorts.includes(port.id) ? 
+                                  <ChevronDown className="h-4 w-4 mr-1" /> : 
+                                  <ChevronRight className="h-4 w-4 mr-1" />
+                                }
+                                <Server className="h-4 w-4 mr-2 text-muted-foreground" />
+                                <span className="font-medium">{port.name}</span>
+                                <span className="text-xs text-muted-foreground ml-2">({port.type})</span>
+                              </div>
+                              
+                              {expandedPorts.includes(port.id) && (
+                                <div className="pl-4 pr-2 pb-2 space-y-2">
+                                  {port.devices.map(device => (
+                                    <div key={device.id} className="border rounded-md">
+                                      <div 
+                                        className="flex items-center p-2 cursor-pointer hover:bg-muted/50"
+                                        onClick={() => toggleDeviceExpansion(device.id)}
+                                      >
+                                        {expandedDevices.includes(device.id) ? 
+                                          <ChevronDown className="h-4 w-4 mr-1" /> : 
+                                          <ChevronRight className="h-4 w-4 mr-1" />
+                                        }
+                                        <Cpu className="h-4 w-4 mr-2 text-muted-foreground" />
+                                        <span className="font-medium">{device.name}</span>
+                                        <span className="text-xs text-muted-foreground ml-2">({device.type})</span>
+                                      </div>
+                                      
+                                      {expandedDevices.includes(device.id) && (
+                                        <div className="pl-4 pr-2 pb-2 overflow-x-auto">
+                                          <Table className="min-w-[400px]">
+                                            <TableHeader>
+                                              <TableRow>
+                                                <TableHead>Name</TableHead>
+                                                <TableHead>Data Type</TableHead>
+                                                <TableHead>Address</TableHead>
+                                                <TableHead></TableHead>
+                                              </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                              {device.tags?.map(tag => (
+                                                <TableRow key={tag.id}>
+                                                  <TableCell className="whitespace-nowrap">{tag.name}</TableCell>
+                                                  <TableCell className="whitespace-nowrap">{tag.dataType}</TableCell>
+                                                  <TableCell className="whitespace-nowrap">{tag.address}</TableCell>
+                                                  <TableCell>
+                                                    <Button 
+                                                      variant="ghost" 
+                                                      size="sm"
+                                                      onClick={() => selectTagFromTree(tag, device.name, port.name)}
+                                                    >
+                                                      Select
+                                                    </Button>
+                                                  </TableCell>
+                                                </TableRow>
+                                              ))}
+                                            </TableBody>
+                                          </Table>
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </TabsContent>
+                  {/* Other tabs content would go here */}
+                </Tabs>
+              </div>
+              
+              {/* Desktop view: Side-by-side layout */}
+              <div className="hidden sm:grid sm:grid-cols-5 gap-4">
                 <Card className="sm:col-span-1 h-auto overflow-auto">
                   <CardHeader className="py-3">
                     <CardTitle className="text-sm font-medium">Tag Categories</CardTitle>
@@ -1010,13 +1389,13 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
                   </CardHeader>
                   <CardContent className="py-0">
                     <div className="space-y-2">
-                      {ioTagsTree.map(port => (
+                      {ioPorts.map(port => (
                         <div key={port.id} className="border rounded-md">
                           <div 
                             className="flex items-center p-2 cursor-pointer hover:bg-muted/50"
                             onClick={() => togglePortExpansion(port.id)}
                           >
-                            {port.expanded ? 
+                            {expandedPorts.includes(port.id) ? 
                               <ChevronDown className="h-4 w-4 mr-1" /> : 
                               <ChevronRight className="h-4 w-4 mr-1" />
                             }
@@ -1025,15 +1404,15 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
                             <span className="text-xs text-muted-foreground ml-2">({port.type})</span>
                           </div>
                           
-                          {port.expanded && (
+                          {expandedPorts.includes(port.id) && (
                             <div className="pl-6 pr-2 pb-2 space-y-2">
                               {port.devices.map(device => (
                                 <div key={device.id} className="border rounded-md">
                                   <div 
                                     className="flex items-center p-2 cursor-pointer hover:bg-muted/50"
-                                    onClick={() => toggleDeviceExpansion(port.id, device.id)}
+                                    onClick={() => toggleDeviceExpansion(device.id)}
                                   >
-                                    {device.expanded ? 
+                                    {expandedDevices.includes(device.id) ? 
                                       <ChevronDown className="h-4 w-4 mr-1" /> : 
                                       <ChevronRight className="h-4 w-4 mr-1" />
                                     }
@@ -1042,8 +1421,8 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
                                     <span className="text-xs text-muted-foreground ml-2">({device.type})</span>
                                   </div>
                                   
-                                  {device.expanded && (
-                                    <div className="pl-6 pr-2 pb-2">
+                                  {expandedDevices.includes(device.id) && (
+                                    <div className="pl-6 pr-2 pb-2 overflow-x-auto">
                                       <Table>
                                         <TableHeader>
                                           <TableRow>
@@ -1054,7 +1433,7 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
                                           </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                          {device.tags.map(tag => (
+                                          {device.tags?.map(tag => (
                                             <TableRow key={tag.id}>
                                               <TableCell>{tag.name}</TableCell>
                                               <TableCell>{tag.dataType}</TableCell>
@@ -1422,6 +1801,291 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
           </CardContent>
         </Card>
       )}
+      
+      {/* Tag Selection Dialog */}
+      <Dialog open={tagSelectionDialogOpen} onOpenChange={setTagSelectionDialogOpen}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Select Tag</DialogTitle>
+            <DialogDescription>
+              Choose a tag to add to your Modbus configuration
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="flex gap-2 h-[500px]">
+            {/* Left side: Data Center Categories (1/4 width) */}
+            <div className="w-1/4 border rounded-md overflow-auto">
+              <div className="p-2 font-medium border-b">Data Center</div>
+              <ScrollArea className="h-[450px]">
+                <ul className="space-y-1 p-2">
+                  {/* IO Tag Section */}
+                  <li className="rounded hover:bg-muted">
+                    <div 
+                      className="flex items-center p-2 cursor-pointer"
+                      onClick={() => togglePortExpansion('io-tag')}
+                    >
+                      {expandedPorts.includes('io-tag') ? 
+                        <ChevronDown className="h-4 w-4 mr-1" /> : 
+                        <ChevronRight className="h-4 w-4 mr-1" />
+                      }
+                      <Tag className="h-4 w-4 mr-2" />
+                      <span className="text-sm">IO Tag</span>
+                    </div>
+                    
+                    {/* Show ports if IO Tag is expanded */}
+                    {expandedPorts.includes('io-tag') && (
+                      <ul className="ml-6 space-y-1">
+                        {ioPorts.map(port => (
+                          <li key={port.id} className="rounded hover:bg-muted">
+                            <div 
+                              className="flex items-center p-2 cursor-pointer"
+                              onClick={() => togglePortExpansion(port.id)}
+                            >
+                              {expandedPorts.includes(port.id) ? 
+                                <ChevronDown className="h-4 w-4 mr-1" /> : 
+                                <ChevronRight className="h-4 w-4 mr-1" />
+                              }
+                              <Server className="h-4 w-4 mr-2" />
+                              <span className="text-sm">{port.name}</span>
+                            </div>
+                            
+                            {/* Show devices if port is expanded */}
+                            {expandedPorts.includes(port.id) && (
+                              <ul className="ml-6 space-y-1">
+                                {port.devices?.map(device => (
+                                  <li key={device.id} className="rounded hover:bg-muted">
+                                    <div 
+                                      className="flex items-center p-2 cursor-pointer"
+                                      onClick={() => toggleDeviceExpansion(device.id)}
+                                    >
+                                      {expandedDevices.includes(device.id) ? 
+                                        <ChevronDown className="h-4 w-4 mr-1" /> : 
+                                        <ChevronRight className="h-4 w-4 mr-1" />
+                                      }
+                                      <Cpu className="h-4 w-4 mr-2" />
+                                      <span className="text-sm">{device.name}</span>
+                                    </div>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </li>
+                  
+                  {/* Calculation Tag Section */}
+                  <li className="rounded hover:bg-muted">
+                    <div 
+                      className="flex items-center p-2 cursor-pointer"
+                      onClick={() => togglePortExpansion('calculation-tag')}
+                    >
+                      {expandedPorts.includes('calculation-tag') ? 
+                        <ChevronDown className="h-4 w-4 mr-1" /> : 
+                        <ChevronRight className="h-4 w-4 mr-1" />
+                      }
+                      <Tag className="h-4 w-4 mr-2" />
+                      <span className="text-sm">Calculation Tag</span>
+                    </div>
+                    
+                    {/* Show calculation tags when expanded */}
+                    {expandedPorts.includes('calculation-tag') && (
+                      <ul className="ml-6 space-y-1">
+                        {/* This would be populated with actual calculation tags */}
+                        <li className="text-xs text-muted-foreground p-2">Select to view calculation tags</li>
+                      </ul>
+                    )}
+                  </li>
+                  
+                  {/* User Tag Section */}
+                  <li className="rounded hover:bg-muted">
+                    <div 
+                      className="flex items-center p-2 cursor-pointer"
+                      onClick={() => togglePortExpansion('user-tag')}
+                    >
+                      {expandedPorts.includes('user-tag') ? 
+                        <ChevronDown className="h-4 w-4 mr-1" /> : 
+                        <ChevronRight className="h-4 w-4 mr-1" />
+                      }
+                      <Tag className="h-4 w-4 mr-2" />
+                      <span className="text-sm">User Tag</span>
+                    </div>
+                    
+                    {/* Show user tags when expanded */}
+                    {expandedPorts.includes('user-tag') && (
+                      <ul className="ml-6 space-y-1">
+                        {/* This would be populated with actual user tags */}
+                        <li className="text-xs text-muted-foreground p-2">Select to view user tags</li>
+                      </ul>
+                    )}
+                  </li>
+                  
+                  {/* System Tag Section */}
+                  <li className="rounded hover:bg-muted">
+                    <div 
+                      className="flex items-center p-2 cursor-pointer"
+                      onClick={() => togglePortExpansion('system-tag')}
+                    >
+                      {expandedPorts.includes('system-tag') ? 
+                        <ChevronDown className="h-4 w-4 mr-1" /> : 
+                        <ChevronRight className="h-4 w-4 mr-1" />
+                      }
+                      <Tag className="h-4 w-4 mr-2" />
+                      <span className="text-sm">System Tag</span>
+                    </div>
+                    
+                    {/* Show system tags when expanded */}
+                    {expandedPorts.includes('system-tag') && (
+                      <ul className="ml-6 space-y-1">
+                        {/* This would be populated with actual system tags */}
+                        <li className="text-xs text-muted-foreground p-2">Select to view system tags</li>
+                      </ul>
+                    )}
+                  </li>
+                  
+                  {/* Stats Tag Section */}
+                  <li className="rounded hover:bg-muted">
+                    <div 
+                      className="flex items-center p-2 cursor-pointer"
+                      onClick={() => togglePortExpansion('stats-tag')}
+                    >
+                      {expandedPorts.includes('stats-tag') ? 
+                        <ChevronDown className="h-4 w-4 mr-1" /> : 
+                        <ChevronRight className="h-4 w-4 mr-1" />
+                      }
+                      <BarChart className="h-4 w-4 mr-2" />
+                      <span className="text-sm">Stats Tag</span>
+                    </div>
+                    
+                    {/* Show stats tags when expanded */}
+                    {expandedPorts.includes('stats-tag') && (
+                      <ul className="ml-6 space-y-1">
+                        {/* This would be populated with actual stats tags */}
+                        <li className="text-xs text-muted-foreground p-2">Select to view stats tags</li>
+                      </ul>
+                    )}
+                  </li>
+                </ul>
+              </ScrollArea>
+            </div>
+            
+            {/* Right side: Device and Tag details (3/4 width) */}
+            <div className="w-3/4 border rounded-md overflow-hidden">
+              <div className="p-2 font-medium border-b">Available Tags</div>
+              <ScrollArea className="h-[450px]">
+                {/* Show IO tags if IO Tag and specific port and device are selected */}
+                {expandedPorts.includes('io-tag') && expandedDevices.length > 0 && (
+                  <div className="p-4 space-y-4">
+                    {ioPorts
+                      .filter(port => expandedPorts.includes(port.id))
+                      .map(port => (
+                        <div key={port.id} className="space-y-4">
+                          {port.devices
+                            .filter(device => expandedDevices.includes(device.id))
+                            .map(device => (
+                              <div key={device.id} className="border rounded-md p-4">
+                                <div className="flex items-center mb-3">
+                                  <Cpu className="h-5 w-5 mr-2" />
+                                  <h3 className="text-md font-semibold">{device.name}</h3>
+                                </div>
+                                
+                                <div className="space-y-2">
+                                  {device.tags && device.tags.length > 0 ? (
+                                    <Table>
+                                      <TableHeader>
+                                        <TableRow>
+                                          <TableHead>Tag Name</TableHead>
+                                          <TableHead>Data Type</TableHead>
+                                          <TableHead>Address</TableHead>
+                                          <TableHead>Description</TableHead>
+                                          <TableHead></TableHead>
+                                        </TableRow>
+                                      </TableHeader>
+                                      <TableBody>
+                                        {device.tags.map(tag => (
+                                          <TableRow key={tag.id}>
+                                            <TableCell>{tag.name}</TableCell>
+                                            <TableCell>{tag.dataType}</TableCell>
+                                            <TableCell>{tag.address}</TableCell>
+                                            <TableCell className="max-w-[200px] truncate">
+                                              {tag.description}
+                                            </TableCell>
+                                            <TableCell>
+                                              <Button 
+                                                size="sm" 
+                                                onClick={() => selectTagFromTree(tag, device.name, port.name)}
+                                              >
+                                                Select
+                                              </Button>
+                                            </TableCell>
+                                          </TableRow>
+                                        ))}
+                                      </TableBody>
+                                    </Table>
+                                  ) : (
+                                    <div className="text-center p-4 text-muted-foreground">
+                                      No tags available for this device
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                        </div>
+                      ))}
+                  </div>
+                )}
+                
+                {/* Show placeholder if calculation tag section is selected */}
+                {expandedPorts.includes('calculation-tag') && (
+                  <div className="flex flex-col items-center justify-center h-full p-8 text-muted-foreground">
+                    <Tag className="h-12 w-12 mb-4 text-muted-foreground/50" />
+                    <p className="text-center">Calculation tags would be shown here based on the selected category</p>
+                  </div>
+                )}
+                
+                {/* Show placeholder if user tag section is selected */}
+                {expandedPorts.includes('user-tag') && (
+                  <div className="flex flex-col items-center justify-center h-full p-8 text-muted-foreground">
+                    <Tag className="h-12 w-12 mb-4 text-muted-foreground/50" />
+                    <p className="text-center">User tags would be shown here based on the selected category</p>
+                  </div>
+                )}
+                
+                {/* Show placeholder if system tag section is selected */}
+                {expandedPorts.includes('system-tag') && (
+                  <div className="flex flex-col items-center justify-center h-full p-8 text-muted-foreground">
+                    <Tag className="h-12 w-12 mb-4 text-muted-foreground/50" />
+                    <p className="text-center">System tags would be shown here based on the selected category</p>
+                  </div>
+                )}
+                
+                {/* Show placeholder if stats tag section is selected */}
+                {expandedPorts.includes('stats-tag') && (
+                  <div className="flex flex-col items-center justify-center h-full p-8 text-muted-foreground">
+                    <BarChart className="h-12 w-12 mb-4 text-muted-foreground/50" />
+                    <p className="text-center">Stats tags would be shown here based on the selected category</p>
+                  </div>
+                )}
+                
+                {/* Show default placeholder if no section is selected */}
+                {!expandedPorts.some(id => ['io-tag', 'calculation-tag', 'user-tag', 'system-tag', 'stats-tag'].includes(id)) && (
+                  <div className="flex flex-col items-center justify-center h-full p-8 text-muted-foreground">
+                    <Server className="h-12 w-12 mb-4 text-muted-foreground/50" />
+                    <p className="text-center">Select a tag category from the left panel to view available tags</p>
+                  </div>
+                )}
+              </ScrollArea>
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTagSelectionDialogOpen(false)}>
+              Cancel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Form>
   )
 }

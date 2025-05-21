@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DNP3Form } from "@/components/forms/dnp3-form"
 import { OPCUAForm } from "@/components/forms/opcua-form"
 import { ModbusForm } from "@/components/forms/modbus-form"
+import { SNMPForm } from "@/components/forms/snmp-form"
 import { IECProtocolsForm } from "@/components/forms/iec-protocols-form"
 import { ProtocolConversionForm } from "@/components/forms/protocol-conversion-form"
 import { DataMappingForm } from "@/components/forms/data-mapping-form"
@@ -34,10 +35,11 @@ export default function ProtocolsTab() {
       </CardHeader>
       <CardContent>
         <Tabs value={activeProtocolTab} onValueChange={setActiveProtocolTab}>
-          <TabsList className="grid w-full grid-cols-2 lg:grid-cols-4">
+          <TabsList className="grid w-full grid-cols-2 lg:grid-cols-5">
             <TabsTrigger value="dnp3">DNP3.0</TabsTrigger>
             <TabsTrigger value="opcua">OPC-UA</TabsTrigger>
             <TabsTrigger value="modbus">Modbus</TabsTrigger>
+            <TabsTrigger value="snmp">SNMP</TabsTrigger>
             <TabsTrigger value="iec">IEC</TabsTrigger>
           </TabsList>
 
@@ -51,6 +53,10 @@ export default function ProtocolsTab() {
 
           <TabsContent value="modbus">
             <ModbusForm separateAdvancedConfig={false} />
+          </TabsContent>
+
+          <TabsContent value="snmp">
+            <SNMPForm />
           </TabsContent>
 
           <TabsContent value="iec">

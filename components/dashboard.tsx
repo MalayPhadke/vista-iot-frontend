@@ -52,6 +52,7 @@ import { DeviceConfigurationPanel } from "@/components/device-configuration-pane
 import HardwareTab from "@/components/tabs/hardware-tab"
 import ConfigurationTab from "@/components/tabs/configuration-tab"
 import IOTagManagement from "@/components/tabs/io-tag-tab"
+import CalculationTagTab from "@/components/tabs/calculation-tag-tab"
 
 // Types for the navigation items
 type NavItem = {
@@ -79,95 +80,7 @@ function DashboardContent() {
   const [isConfiguring, setIsConfiguring] = useState(false)
   
   // Mock IO ports data for the sidebar tree view
-  const [ioPorts, setIoPorts] = useState([
-    {
-      id: "port-1",
-      name: "COM1",
-      type: "builtin",
-      enabled: true,
-      description: "Main serial port for device communication",
-      scanTime: 1000,
-      timeOut: 3000,
-      retryCount: 3,
-      autoRecoverTime: 10,
-      scanMode: "Serial",
-      serialSettings: {
-        port: "COM1",
-        baudRate: 9600,
-        dataBit: 8,
-        stopBit: 1,
-        parity: "None",
-        rts: false,
-        dtr: false
-      },
-      devices: [
-        {
-          id: "device-1",
-          name: "Crane1",
-          type: "Modbus RTU",
-          enabled: true,
-          unitNumber: 1,
-          description: "Tower crane monitoring system",
-          tagWriteType: "Single",
-          addDeviceNameAsPrefix: true,
-          extensionProperties: {
-            useAsciiProtocol: 0,
-            packetDelay: 10,
-            digitalBlockSize: 16,
-            analogBlockSize: 8
-          },
-          tags: []
-        },
-        {
-          id: "device-2",
-          name: "CSS",
-          type: "Modbus RTU",
-          enabled: true,
-          unitNumber: 2,
-          description: "Control system sensors",
-          tagWriteType: "Single",
-          addDeviceNameAsPrefix: true,
-          extensionProperties: {
-            useAsciiProtocol: 0,
-            packetDelay: 10,
-            digitalBlockSize: 16,
-            analogBlockSize: 8
-          },
-          tags: []
-        },
-        {
-          id: "device-3",
-          name: "CapacitorBank1",
-          type: "Modbus RTU",
-          enabled: false,
-          unitNumber: 3,
-          description: "Power factor correction capacitor bank",
-          tagWriteType: "Single",
-          addDeviceNameAsPrefix: true,
-          extensionProperties: {
-            useAsciiProtocol: 0,
-            packetDelay: 10,
-            digitalBlockSize: 16,
-            analogBlockSize: 8
-          },
-          tags: []
-        }
-      ]
-    },
-    {
-      id: "port-2",
-      name: "COM2",
-      type: "minipcie",
-      enabled: true,
-      description: "Expansion port for additional devices",
-      scanTime: 1000,
-      timeOut: 3000,
-      retryCount: 3,
-      autoRecoverTime: 10,
-      scanMode: "Serial",
-      devices: []
-    }
-  ])
+  const [ioPorts, setIoPorts] = useState([])
 
   // Dialog states
   const [restartDialogOpen, setRestartDialogOpen] = useState(false)
@@ -267,7 +180,7 @@ function DashboardContent() {
           isIoTagSection: true
         },
         { title: "User Tag", href: "?tab=datacenter&section=user-tag", icon: Tag },
-        { title: "Calculation Tag", href: "?tab=datacenter&section=calculation-tag", icon: Tag },
+        { title: "Calculation Tag", href: "?tab=datacenter&section=calc-tag", icon: FileDigit },
         { title: "Stats Tag", href: "?tab=datacenter&section=stats-tag", icon: BarChart },
         { title: "System Tag", href: "?tab=datacenter&section=system-tag", icon: Tag },
       ],
@@ -533,7 +446,7 @@ function DashboardContent() {
                   <TabsList className="grid w-full md:w-auto md:inline-grid grid-cols-2 md:grid-cols-9">
                     <TabsTrigger value="overview">Overview</TabsTrigger>
                     <TabsTrigger value="network">Network</TabsTrigger>
-                    <TabsTrigger value="datacenter">Data Center</TabsTrigger>
+                    <TabsTrigger value="datacenter" onClick={() => handleNavigation("?tab=datacenter")}>Data Center</TabsTrigger>
                     <TabsTrigger value="security">Security</TabsTrigger>
                     <TabsTrigger value="protocols">Protocols</TabsTrigger>
                     <TabsTrigger value="mqtt">MQTT</TabsTrigger>
@@ -558,6 +471,8 @@ function DashboardContent() {
                         selectedPortId={portId}
                         selectedDeviceId={deviceItemId}
                       />
+                    ) : section === 'calc-tag' ? (
+                      <CalculationTagTab ioPorts={ioPorts} />
                     ) : (
                       <div className="rounded-lg border p-8">
                         <h2 className="text-lg font-semibold mb-4">Data Center Management</h2>

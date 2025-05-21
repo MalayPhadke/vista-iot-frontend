@@ -81,10 +81,28 @@ export function SidebarNav({ items, sidebarOpen, ioPorts = [] }: SidebarNavProps
               setExpandedDevices(prev => 
                 prev.includes(device.id) ? prev : [...prev, device.id]
               )
+            } else {
+              // Clear expanded devices if device not found
+              setExpandedDevices([])
             }
+          } else {
+            // Clear expanded devices if no device is selected
+            setExpandedDevices([])
           }
+        } else {
+          // Clear expanded ports and devices if port not found
+          setExpandedPorts([])
+          setExpandedDevices([])
         }
+      } else {
+        // Clear expanded ports and devices if no port is selected
+        setExpandedPorts([])
+        setExpandedDevices([])
       }
+    } else {
+      // Clear expanded ports and devices when navigating away from IO tag section
+      setExpandedPorts([])
+      setExpandedDevices([])
     }
   }, [section, portId, deviceId, ioPorts])
 
@@ -113,6 +131,7 @@ export function SidebarNav({ items, sidebarOpen, ioPorts = [] }: SidebarNavProps
       e.stopPropagation();
     }
     
+    // Always just toggle the expansion state without navigation
     setExpandedPorts(prev => {
       if (prev.includes(portId)) {
         return prev.filter(id => id !== portId);
@@ -123,14 +142,21 @@ export function SidebarNav({ items, sidebarOpen, ioPorts = [] }: SidebarNavProps
   }
   
   // Toggle device expansion
-  const toggleDeviceExpansion = (deviceId: string) => {
+  const toggleDeviceExpansion = (deviceId: string, e?: React.MouseEvent) => {
+    // If event is provided, prevent default and stop propagation
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    
+    // Always just toggle the expansion state without navigation
     setExpandedDevices(prev => {
       if (prev.includes(deviceId)) {
-        return prev.filter(id => id !== deviceId)
+        return prev.filter(id => id !== deviceId);
       } else {
-        return [...prev, deviceId]
+        return [...prev, deviceId];
       }
-    })
+    });
   }
   
   // Check if a device is expanded
@@ -214,7 +240,7 @@ export function SidebarNav({ items, sidebarOpen, ioPorts = [] }: SidebarNavProps
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      toggleDeviceExpansion(device.id);
+                      toggleDeviceExpansion(device.id, e);
                     }}
                   />
                 )}

@@ -11,15 +11,18 @@ import {
   Cpu,
   Tags,
   ChevronDown,
-  Pencil
+  Pencil,
+  Eye
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Switch } from "@/components/ui/switch"
 import { 
   Card, 
   CardContent, 
   CardDescription, 
   CardHeader, 
-  CardTitle 
+  CardTitle,
+  CardFooter
 } from "@/components/ui/card"
 import { 
   Dialog, 
@@ -140,19 +143,26 @@ export default function IOTagManagement({
   // Track expanded ports and devices
   const [expandedPorts, setExpandedPorts] = useState<Record<string, boolean>>({})
   const [expandedDevices, setExpandedDevices] = useState<Record<string, boolean>>({})
-  
   // Organize devices by port
   const [devices, setDevices] = useState<Record<string, Device[]>>({})
   
   // Initialize devices state from ioPorts
   useEffect(() => {
-    const devicesByPort: Record<string, Device[]> = {};
     ioPorts.forEach(port => {
-      devicesByPort[port.id] = port.devices || [];
-    });
-    setDevices(devicesByPort);
+      setDevices(prev => ({
+        ...prev,
+        [port.id]: port.devices || []
+      }))
+    })
+    
+    // Store the ioPorts data in localStorage for sharing with other components
+    try {
+      localStorage.setItem('io_ports_data', JSON.stringify(ioPorts))
+    } catch (error) {
+      console.error('Error storing IO ports data in localStorage:', error)
+    }
   }, [ioPorts]);
-  
+
   // Handle changes to selectedPortId and selectedDeviceId
   useEffect(() => {
     // Reset selections if no port ID is provided
@@ -185,269 +195,373 @@ export default function IOTagManagement({
       setSelectedDevice(null);
     }
   }, [ioPorts, selectedPortId, selectedDeviceId]);
-  
-  // Toggle port expansion
-  const togglePortExpansion = (portId: string) => {
-    setExpandedPorts(prev => ({
-      ...prev,
-      [portId]: !prev[portId]
-    }));
-  }
-  
-  // Toggle device expansion
-  const toggleDeviceExpansion = (portId: string, deviceId: string) => {
-    const key = `${portId}-${deviceId}`;
-    setExpandedDevices(prev => ({
-      ...prev,
-      [key]: !prev[key]
-    }));
-  }
 
-  // Add new IO Port
+  // Handle add calculation tag
   const handleAddPort = (config: any) => {
-    const newPort = {
+    // Create a new port with a unique ID
+    const newPort: Port = {
       id: `port-${Date.now()}`,
       ...config,
-      devices: []
-    };
+      devices: [],
+      enabled: true
+    }
     
-    setIoPorts(prev => [...prev, newPort]);
-    setShowAddPortForm(false);
+    // Update state
+    const updatedPorts = [...ioPorts, newPort]
+    setIoPorts(updatedPorts)
+    
+    // Sync to localStorage for other components
+    try {
+      localStorage.setItem('io_ports_data', JSON.stringify(updatedPorts))
+    } catch (error) {
+      console.error('Error storing updated IO ports data in localStorage:', error)
+    }
+    
+    // Close dialog
+    setShowAddPortForm(false)
     
     toast({
       title: "Port Added",
-      description: `${config.name} has been added successfully.`,
-    });
+      description: `Port ${config.name} has been added successfully.`,
+    })
+  }
+
+  // Handle device selection for viewing/editing tags
+  const handleDeviceSelect = (device: Device, portId: string) => {
+    setSelectedDevice({device, portId});
+    // Update URL to reflect the selection - match the sidebar navigation URL pattern
+    window.history.pushState({}, '', `?tab=datacenter&section=io-tag&portId=${portId}&deviceId=${device.id}`);
   }
   
   // Update existing IO Port
   const handleUpdatePort = (config: any) => {
-    setIoPorts(prev => prev.map(port => {
-      if (port.id === editingPort?.id) {
-        return { ...port, ...config };
+    // Find the port to update
+    const portToUpdate = ioPorts.find(port => port.id === config.id)
+    
+    if (portToUpdate) {
+      // Update the port properties while preserving its devices
+      const updatedPort = {
+        ...portToUpdate,
+        ...config,
+        devices: portToUpdate.devices // Preserve existing devices
       }
-      return port;
-    }));
-    
-    setEditingPort(null);
-    
-    toast({
-      title: "Port Updated",
-      description: `${config.name} has been updated successfully.`,
-    });
+      
+      // Update the ioPorts array
+      const updatedPorts = ioPorts.map(port => port.id === config.id ? {
+        ...updatedPort
+      } : port)
+      
+      setIoPorts(updatedPorts)
+      
+      // Close dialog
+      setEditingPort(null)
+      
+      toast({
+        title: "Port Updated",
+        description: `Port ${config.name} has been updated successfully.`,
+      })
+    }
   }
-  
-  // Delete IO Port
+
+  // Handle delete IO Port
   const handleDeletePort = () => {
     if (!deletePortDialog.port) return;
-    
-    setIoPorts(prev => prev.filter(port => port.id !== deletePortDialog.port?.id));
-    
-    // If the deleted port was selected, clear the selection
-    if (selectedPort?.id === deletePortDialog.port.id) {
-      setSelectedPort(null);
-      setSelectedDevice(null);
+
+    try {
+      // Remove the port from the list
+      const updatedPorts = ioPorts.filter(port => port.id !== deletePortDialog.port?.id)
+      setIoPorts(updatedPorts)
+      
+      // Sync to localStorage for other components
+      localStorage.setItem('io_ports_data', JSON.stringify(updatedPorts))
+      
+      // Remove the port's devices from the devices state
+      setDevices(prev => {
+        const newDevices = { ...prev }
+        delete newDevices[deletePortDialog.port?.id || ''] 
+        return newDevices
+      })
+      
+      // Clear selection if the deleted port was selected
+      if (selectedPort?.id === deletePortDialog.port.id) {
+        setSelectedPort(null)
+      }
+      
+      // Close the dialog
+      setDeletePortDialog({isOpen: false, port: null})
+      
+      toast({
+        title: "Port Deleted",
+        description: `Port ${deletePortDialog.port.name} has been deleted successfully.`,
+      })
+    } catch (error) {
+      console.error("Error deleting port:", error)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to delete port. Please try again.",
+      })
     }
-    
-    setDeletePortDialog({isOpen: false, port: null});
-    
-    toast({
-      title: "Port Deleted",
-      description: `${deletePortDialog.port.name} has been deleted successfully.`,
-    });
   }
-  
-  // Handle port selection
-  const handlePortSelect = (port: Port) => {
-    setSelectedPort(port);
-    setSelectedDevice(null);
-  }
-  
+
   // Handle showing add device form for a specific port
   const handleShowAddDeviceForm = (portId: string) => {
     setAddingDeviceForPort(portId);
     setShowAddDeviceForm(true);
   }
-  
+
   // Handle device form submission for adding a new device
   const handleAddDevice = (config: any, portId: string) => {
-    const newDevice = {
-      id: `device-${Date.now()}`,
-      ...config,
-      tags: [
-        // Add a default tag for the new device
-        {
-          id: `tag-${Date.now()}`,
-          name: "Default_Tag",
-          dataType: "UINT16",
-          address: "40001",
-          description: "Default tag created automatically"
+    try {
+      // Create a new device with a unique ID
+      const newDevice: Device = {
+        id: `device-${Date.now()}`,
+        ...config,
+        tags: [],
+        enabled: true
+      }
+      
+      // Update the devices state for the selected port
+      setDevices(prev => ({
+        ...prev,
+        [portId]: [...(prev[portId] || []), newDevice]
+      }))
+      
+      // Also update the ioPorts state to keep them in sync
+      const updatedPorts = ioPorts.map(port => {
+        if (port.id === portId) {
+          return {
+            ...port,
+            devices: [...(port.devices || []), newDevice]
+          }
         }
-      ]
-    };
-    
-    // Update devices state
-    setDevices(prev => {
-      const updatedDevices = {...prev};
-      if (updatedDevices[portId]) {
-        updatedDevices[portId] = [...updatedDevices[portId], newDevice];
-      } else {
-        updatedDevices[portId] = [newDevice];
+        return port
+      })
+      
+      setIoPorts(updatedPorts)
+      
+      // Sync to localStorage for other components
+      try {
+        localStorage.setItem('io_ports_data', JSON.stringify(updatedPorts))
+      } catch (error) {
+        console.error('Error storing updated IO ports data in localStorage:', error)
       }
-      return updatedDevices;
-    });
-    
-    // Update ioPorts state
-    setIoPorts(prev => prev.map(port => {
-      if (port.id === portId) {
-        return {
-          ...port,
-          devices: [...(port.devices || []), newDevice]
-        };
-      }
-      return port;
-    }));
-    
-    setShowAddDeviceForm(false);
-    setAddingDeviceForPort(null);
-    
-    toast({
-      title: "Device Added",
-      description: `${config.name} has been added successfully.`,
-    });
+      
+      // Close the dialog
+      setShowAddDeviceForm(false)
+      setAddingDeviceForPort(null)
+      
+      toast({
+        title: "Device Added",
+        description: `Device ${config.name} has been added successfully.`,
+      })
+    } catch (error) {
+      console.error("Error adding device:", error)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to add device. Please try again.",
+      })
+    }
   }
-  
-  // Handle edit device form submission
+
+  // Handle updating device configuration
   const handleUpdateDevice = (config: any, portId: string) => {
-    // Update devices state
-    setDevices(prev => {
-      const updatedDevices = {...prev};
-      if (updatedDevices[portId]) {
-        updatedDevices[portId] = updatedDevices[portId].map((device: Device) => 
-          device.id === editingDevice.id ? {...device, ...config} : device
-        );
+    // Find the port that contains the device
+    const portToUpdate = ioPorts.find(port => port.id === portId)
+    
+    if (portToUpdate && portToUpdate.devices) {
+      // Find the device to update
+      const deviceToUpdate = portToUpdate.devices.find(device => device.id === config.id)
+      
+      if (deviceToUpdate) {
+        // Update the device properties while preserving its tags
+        const updatedDevice = {
+          ...deviceToUpdate,
+          ...config,
+          tags: deviceToUpdate.tags // Preserve existing tags
+        }
+        
+        // Update the devices array for this port
+        const updatedDevices = portToUpdate.devices.map(device => 
+          device.id === config.id ? updatedDevice : device
+        )
+        
+        // Update the port with the updated devices
+        const updatedPort = {
+          ...portToUpdate,
+          devices: updatedDevices
+        }
+        
+        // Update the ioPorts array
+        const updatedPorts = ioPorts.map(port => 
+          port.id === portId ? updatedPort : port
+        )
+        
+        setIoPorts(updatedPorts)
+        
+        // Close dialog
+        setEditingDevice(null)
+        
+        toast({
+          title: "Device Updated",
+          description: `Device ${config.name} has been updated successfully.`,
+        })
       }
-      return updatedDevices;
-    });
-    
-    // Update ioPorts state
-    setIoPorts(prev => prev.map(port => {
-      if (port.id === portId) {
-        return {
-          ...port,
-          devices: (port.devices || []).map((device: Device) => 
-            device.id === editingDevice.id ? {...device, ...config} : device
-          )
-        };
-      }
-      return port;
-    }));
-    
-    setEditingDevice(null);
-    
-    toast({
-      title: "Device Updated",
-      description: `${config.name} has been updated successfully.`,
-    });
+    }
   }
-  
+
   // Handle device deletion
   const handleDeleteDevice = () => {
-    if (!deleteDeviceDialog.device || !deleteDeviceDialog.portId) return;
+    if (!deleteDeviceDialog.device || !deleteDeviceDialog.portId) return
     
-    // Update devices state
-    setDevices(prev => {
-      const updatedDevices = {...prev};
-      if (updatedDevices[deleteDeviceDialog.portId!]) {
-        updatedDevices[deleteDeviceDialog.portId!] = updatedDevices[deleteDeviceDialog.portId!].filter(
-          (device: Device) => device.id !== deleteDeviceDialog.device?.id
-        );
-      }
-      return updatedDevices;
-    });
-    
-    // Update ioPorts state
-    setIoPorts(prev => prev.map(port => {
-      if (port.id === deleteDeviceDialog.portId) {
+    try {
+      const deviceId = deleteDeviceDialog.device.id
+      const portId = deleteDeviceDialog.portId
+      
+      // Update the devices state
+      setDevices(prev => {
+        const updatedDevices = (prev[portId] || []).filter(d => d.id !== deviceId)
+        
         return {
-          ...port,
-          devices: (port.devices || []).filter(
-            (device: Device) => device.id !== deleteDeviceDialog.device?.id
-          )
-        };
+          ...prev,
+          [portId]: updatedDevices
+        }
+      })
+      
+      // Update ioPorts state
+      const updatedPorts = ioPorts.map(port => {
+        if (port.id === portId) {
+          return {
+            ...port,
+            devices: (port.devices || []).filter(d => d.id !== deviceId)
+          }
+        }
+        return port
+      })
+      
+      setIoPorts(updatedPorts)
+      
+      // Sync to localStorage for other components
+      try {
+        localStorage.setItem('io_ports_data', JSON.stringify(updatedPorts))
+      } catch (error) {
+        console.error('Error storing updated IO ports data in localStorage:', error)
       }
-      return port;
-    }));
-    
-    if (selectedDevice?.device.id === deleteDeviceDialog.device.id) {
-      setSelectedDevice(null);
+      
+      // Clear selection if the deleted device was selected
+      if (selectedDevice?.device.id === deviceId) {
+        setSelectedDevice(null)
+      }
+      
+      // Close the dialog
+      setDeleteDeviceDialog({isOpen: false, device: null, portId: null})
+      
+      toast({
+        title: "Device Deleted",
+        description: `Device ${deleteDeviceDialog.device.name} has been deleted successfully.`,
+      })
+    } catch (error) {
+      console.error("Error deleting device:", error)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to delete device. Please try again.",
+      })
     }
-    
-    setDeleteDeviceDialog({isOpen: false, device: null, portId: null});
-    
-    toast({
-      title: "Device Deleted",
-      description: `${deleteDeviceDialog.device.name} has been deleted successfully.`,
-    });
   }
-  
-  // Handle device selection
-  const handleDeviceSelect = (device: Device, portId: string) => {
-    setSelectedDevice({device, portId});
-    
-    // Update URL to include the device ID
-    window.history.pushState(
-      {}, 
-      '', 
-      `?tab=datacenter&section=io-tag&portId=${portId}&deviceId=${device.id}`
-    );
-  }
-  
+
   // Handle IO tag updates
   const handleUpdateTags = (portId: string, deviceId: string, updatedTags: IOTag[]) => {
-    // Update devices state
-    setDevices(prev => {
-      const updatedDevices = {...prev};
-      if (updatedDevices[portId]) {
-        updatedDevices[portId] = updatedDevices[portId].map((device: Device) => 
-          device.id === deviceId ? {...device, tags: updatedTags} : device
-        );
-      }
-      return updatedDevices;
-    });
-    
-    // Update ioPorts state
-    setIoPorts(prev => prev.map(port => {
-      if (port.id === portId) {
+    try {
+      // Update the device tags in the devices state
+      setDevices(prev => {
+        const portDevices = [...(prev[portId] || [])]
+        const deviceIndex = portDevices.findIndex(d => d.id === deviceId)
+        
+        if (deviceIndex >= 0) {
+          portDevices[deviceIndex] = {
+            ...portDevices[deviceIndex],
+            tags: updatedTags
+          }
+        }
+        
         return {
-          ...port,
-          devices: (port.devices || []).map((device: Device) => 
-            device.id === deviceId ? {...device, tags: updatedTags} : device
-          )
-        };
+          ...prev,
+          [portId]: portDevices
+        }
+      })
+      
+      // Update ioPorts state
+      const updatedPorts = ioPorts.map(port => {
+        if (port.id === portId) {
+          const updatedDevices = [...(port.devices || [])]
+          const deviceIndex = updatedDevices.findIndex(d => d.id === deviceId)
+          
+          if (deviceIndex >= 0) {
+            updatedDevices[deviceIndex] = {
+              ...updatedDevices[deviceIndex],
+              tags: updatedTags
+            }
+          }
+          
+          return {
+            ...port,
+            devices: updatedDevices
+          }
+        }
+        return port
+      })
+      
+      setIoPorts(updatedPorts)
+      
+      // Sync to localStorage for other components
+      try {
+        localStorage.setItem('io_ports_data', JSON.stringify(updatedPorts))
+      } catch (error) {
+        console.error('Error storing updated IO ports data in localStorage:', error)
       }
-      return port;
-    }));
-    
-    toast({
-      title: "Tags Updated",
-      description: `Successfully updated IO tags for device`
-    });
+      
+      toast({
+        title: "Tags Updated",
+        description: `Tags have been updated successfully.`,
+      })
+    } catch (error) {
+      console.error("Error updating tags:", error)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to update tags. Please try again.",
+      })
+    }
   }
 
   return (
     <div className="space-y-6">
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <div>
-            <CardTitle>IO Tag Management</CardTitle>
-            <CardDescription>
-              Configure communication ports, devices, and IO tags for your gateway
-            </CardDescription>
+            {selectedPort ? (
+              <>
+                <CardTitle>Devices</CardTitle>
+                <CardDescription>
+                  Manage devices for port: {selectedPort.name}
+                </CardDescription>
+              </>
+            ) : (
+              <>
+                <CardTitle>IO Ports</CardTitle>
+                <CardDescription>
+                  Configure communication ports for your IO tags
+                </CardDescription>
+              </>
+            )}
           </div>
-          <Button onClick={() => setShowAddPortForm(true)}>
-            <Plus className="mr-2 h-4 w-4" /> Add Port
-          </Button>
+          {!selectedPort && (
+            <Button onClick={() => setShowAddPortForm(true)}>
+              <Plus className="mr-2 h-4 w-4" /> Add Port
+            </Button>
+          )}
         </CardHeader>
         <CardContent>
           {ioPorts.length === 0 ? (
@@ -498,6 +612,87 @@ export default function IOTagManagement({
                     portId={selectedDevice.portId} 
                     onUpdate={handleUpdateTags}
                   />
+                </div>
+              ) : !selectedPort ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                  {ioPorts.map((port) => (
+                    <Card 
+                      key={port.id} 
+                      className="overflow-hidden cursor-pointer hover:border-primary transition-colors"
+                      onClick={() => {
+                        window.history.pushState({}, '', `?tab=datacenter&section=io-tag&portId=${port.id}`);
+                        setSelectedPort(port);
+                      }}
+                    >
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-base">{port.name}</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-2">
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-muted-foreground">Type:</span>
+                            <span className="text-sm font-medium">{getTypeDisplayName(port.type)}</span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-muted-foreground">Scan Mode:</span>
+                            <span className="text-sm font-medium">{port.scanMode}</span>
+                          </div>
+                          <div className="flex justify-between items-center pt-2">
+                            <span className="text-sm text-muted-foreground">Status:</span>
+                            <Switch
+                              checked={port.enabled}
+                              onCheckedChange={(checked: boolean) => {
+                                // Prevent the card click when toggling the switch
+                                const e = window.event;
+                                if (e) {
+                                  e.stopPropagation();
+                                }
+                                const updatedPort = { ...port, enabled: checked };
+                                handleUpdatePort(updatedPort);
+                              }}
+                            />
+                          </div>
+                        </div>
+                      </CardContent>
+                      <CardFooter className="border-t pt-3 flex justify-between">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            // This is redundant since the whole card is clickable, but keeping for clarity
+                            e.stopPropagation();
+                            window.history.pushState({}, '', `?tab=datacenter&section=io-tag&portId=${port.id}`);
+                            setSelectedPort(port);
+                          }}
+                        >
+                          <Eye className="h-4 w-4 mr-1" /> View
+                        </Button>
+                        <div className="flex gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingPort(port);
+                            }}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-destructive hover:text-destructive"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDeletePortDialog({ isOpen: true, port });
+                            }}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </CardFooter>
+                    </Card>
+                  ))}
                 </div>
               ) : selectedPort ? (
                 <div className="border rounded-lg p-4">
@@ -731,7 +926,7 @@ export default function IOTagManagement({
       <Dialog open={!!editingPort} onOpenChange={(open) => !open && setEditingPort(null)}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>
-            <DialogTitle>Edit Port Configuration</DialogTitle>
+            <DialogTitle>Edit Port</DialogTitle>
             <DialogDescription>
               Modify settings for {editingPort?.name}
             </DialogDescription>
@@ -739,7 +934,7 @@ export default function IOTagManagement({
           {editingPort && (
             <IOPortForm 
               onSubmit={handleUpdatePort} 
-              initialValues={editingPort}
+              existingConfig={editingPort}
             />
           )}
         </DialogContent>
@@ -774,7 +969,7 @@ export default function IOTagManagement({
           {addingDeviceForPort && (
             <DeviceForm 
               onSubmit={(config) => handleAddDevice(config, addingDeviceForPort)} 
-              portType={ioPorts.find(p => p.id === addingDeviceForPort)?.type || ""}
+              portId={addingDeviceForPort}
             />
           )}
         </DialogContent>
@@ -792,17 +987,21 @@ export default function IOTagManagement({
           {editingDevice && (
             <DeviceForm 
               onSubmit={(config) => handleUpdateDevice(config, editingDevice.port.id)} 
-              initialValues={{
+              existingConfig={{
+                id: editingDevice.id,
                 name: editingDevice.name,
-                type: editingDevice.type,
+                deviceType: editingDevice.type,
                 enabled: editingDevice.enabled,
                 unitNumber: editingDevice.unitNumber,
                 description: editingDevice.description,
-                tagWriteType: editingDevice.tagWriteType,
-                addDeviceNameAsPrefix: editingDevice.addDeviceNameAsPrefix,
-                extensionProperties: editingDevice.extensionProperties
+                tagWriteType: editingDevice.tagWriteType || 'Single Write',
+                addDeviceNameAsPrefix: editingDevice.addDeviceNameAsPrefix || false,
+                useAsciiProtocol: editingDevice.extensionProperties?.useAsciiProtocol || 0,
+                packetDelay: editingDevice.extensionProperties?.packetDelay || 20,
+                digitalBlockSize: editingDevice.extensionProperties?.digitalBlockSize || 512,
+                analogBlockSize: editingDevice.extensionProperties?.analogBlockSize || 64
               }}
-              portType={editingDevice.port.type}
+              portId={editingDevice.port.id}
             />
           )}
         </DialogContent>

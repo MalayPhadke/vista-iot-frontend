@@ -35,7 +35,7 @@ export function WatchdogForm() {
       toast.success('Watchdog settings saved successfully!', {
         duration: 3000,
       })
-      console.log(values)
+      // console.log(values)
     } catch (error) {
       console.error('Error saving watchdog settings:', error)
       toast.error('Failed to save watchdog settings. Please try again.', {
