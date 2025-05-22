@@ -36,7 +36,7 @@ export function ComPortsForm() {
       title: "COM Port settings updated",
       description: "The serial port has been configured successfully.",
     })
-    console.log(values)
+    // console.log(values)
   }
 
   return (

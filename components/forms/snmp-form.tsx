@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/components/ui/use-toast"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Plus, Trash2, Download, ChevronRight, ChevronDown, Tag, Server, Cpu, BarChart } from "lucide-react"
+import { Plus, Trash2, Download, ChevronRight, ChevronDown, Tag, Server, Cpu, BarChart, FileDigit, UserCircle, Cog } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
 
@@ -633,6 +633,45 @@ export function SNMPForm() {
     })
   }
   
+  // Function to delete a tag
+  const deleteTag = (tagId: string) => {
+    // Don't allow deletion of root tag
+    if (tagId === "root") return;
+    
+    // Get the tag to be deleted
+    const tagToDelete = snmpTags.find(tag => tag.id === tagId);
+    if (!tagToDelete) return;
+    
+    // Get all child tags (recursively)
+    const getAllChildIds = (parentId: string): string[] => {
+      const directChildren = snmpTags.filter(tag => tag.parentId === parentId).map(tag => tag.id);
+      const allChildren = [...directChildren];
+      
+      directChildren.forEach(childId => {
+        allChildren.push(...getAllChildIds(childId));
+      });
+      
+      return allChildren;
+    };
+    
+    const childIds = getAllChildIds(tagId);
+    const allIdsToDelete = [tagId, ...childIds];
+    
+    // Delete the tag and all its children
+    setSnmpTags(prevTags => prevTags.filter(tag => !allIdsToDelete.includes(tag.id)));
+    
+    // Remove from selection if selected
+    setSelectedTags(prevSelected => prevSelected.filter(id => !allIdsToDelete.includes(id)));
+    
+    // Show success message
+    toast({
+      title: tagToDelete.isGroup ? "Group Deleted" : "Tag Deleted",
+      description: tagToDelete.isGroup 
+        ? `Deleted group ${tagToDelete.name} and all its tags` 
+        : `Deleted tag ${tagToDelete.name}`,
+    });
+  }
+  
   // Function to toggle trap expansion
   const toggleTrapExpansion = () => {
     setTrapExpanded(prev => !prev)
@@ -1056,17 +1095,38 @@ export function SNMPForm() {
                 )}
               </TableCell>
               <TableCell>
-                {(isGroup || tag.id === "root") && (
-                  <Button 
-                    onClick={() => tag.id === "root" ? addTag() : addTagToGroup(tag.id)} 
-                    size="sm" 
-                    variant="outline" 
-                    className="h-8"
-                  >
-                    <Plus className="h-4 w-4 mr-1" />
-                    Add Tag
-                  </Button>
-                )}
+                <div className="flex items-center gap-2">
+                  {(isGroup || tag.id === "root") && (
+                    <Button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        tag.id === "root" ? addTag() : addTagToGroup(tag.id);
+                      }} 
+                      size="sm" 
+                      variant="outline" 
+                      className="h-8"
+                    >
+                      <Plus className="h-4 w-4 mr-1" />
+                      Add Tag
+                    </Button>
+                  )}
+                  
+                  {/* Delete button - don't show for root tag */}
+                  {tag.id !== "root" && (
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="flex items-center gap-1 text-destructive hover:bg-destructive/10 h-7 px-2"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteTag(tag.id);
+                      }}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                      {isGroup ? "Delete Group" : "Delete"}
+                    </Button>
+                  )}
+                </div>
               </TableCell>
             </TableRow>
             {hasChildren && isExpanded && renderTags(tag.id, level + 1)}
@@ -1095,68 +1155,234 @@ export function SNMPForm() {
             </DialogDescription>
           </DialogHeader>
           
-          <ScrollArea className="h-[400px] pr-4">
-            <div className="space-y-4">
-              {ioPorts.length === 0 ? (
-                <div className="p-4 text-center">
-                  <p className="text-muted-foreground">No IO ports found. Please configure IO ports first.</p>
-                </div>
-              ) : (
-                ioPorts.map(port => (
-                  <div key={port.id} className="border rounded-md">
+          <div className="flex gap-2 h-[500px]">
+            {/* Left side: Data Center Categories (1/4 width) */}
+            <div className="w-1/4 border rounded-md overflow-auto">
+              <div className="p-2 font-medium border-b">Data Center</div>
+              <ScrollArea className="h-[450px]">
+                <ul className="space-y-1 p-2">
+                  {/* IO Tag Section */}
+                  <li className="rounded hover:bg-muted">
                     <div 
-                      className="flex items-center justify-between p-2 cursor-pointer hover:bg-muted"
-                      onClick={() => togglePortExpansion(port.id)}
+                      className="flex items-center p-2 cursor-pointer"
+                      onClick={() => togglePortExpansion('io-tag')}
                     >
-                      <div className="flex items-center gap-2">
-                        {expandedPorts.includes(port.id) ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                        <Server className="h-4 w-4" />
-                        <span className="font-medium">{port.name}</span>
-                      </div>
-                      <span className="text-xs text-muted-foreground">{port.type}</span>
+                      {expandedPorts.includes('io-tag') ? 
+                        <ChevronDown className="h-4 w-4 mr-1" /> : 
+                        <ChevronRight className="h-4 w-4 mr-1" />
+                      }
+                      <Tag className="h-4 w-4 mr-2" />
+                      <span className="text-sm">IO Tag</span>
                     </div>
                     
-                    {expandedPorts.includes(port.id) && (
-                      <div className="pl-6 pb-2">
-                        {port.devices.map(device => (
-                          <div key={device.id} className="mt-1">
+                    {/* Show ports if IO Tag is expanded */}
+                    {expandedPorts.includes('io-tag') && (
+                      <ul className="ml-6 space-y-1">
+                        {ioPorts.map(port => (
+                          <li key={port.id} className="rounded hover:bg-muted">
                             <div 
-                              className="flex items-center gap-2 p-1 cursor-pointer hover:bg-muted rounded-sm"
-                              onClick={() => toggleDeviceExpansion(device.id)}
+                              className="flex items-center p-2 cursor-pointer"
+                              onClick={() => togglePortExpansion(port.id)}
                             >
-                              {expandedDevices.includes(device.id) ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                              <Cpu className="h-4 w-4" />
-                              <span>{device.name}</span>
+                              {expandedPorts.includes(port.id) ? 
+                                <ChevronDown className="h-4 w-4 mr-1" /> : 
+                                <ChevronRight className="h-4 w-4 mr-1" />
+                              }
+                              <Server className="h-4 w-4 mr-2" />
+                              <span className="text-sm">{port.name}</span>
                             </div>
                             
-                            {expandedDevices.includes(device.id) && device.tags && (
-                              <div className="pl-6">
-                                {device.tags.map(tag => (
-                                  <div key={tag.id} className="flex items-center justify-between p-1 hover:bg-muted rounded-sm">
-                                    <div className="flex items-center gap-2">
-                                      <Tag className="h-4 w-4" />
-                                      <span>{tag.name}</span>
-                                    </div>
-                                    <Button 
-                                      size="sm" 
-                                      variant="outline"
-                                      onClick={() => selectTagFromTree(tag, device.name, port.name)}
+                            {/* Show devices if port is expanded */}
+                            {expandedPorts.includes(port.id) && (
+                              <ul className="ml-6 space-y-1">
+                                {port.devices?.map(device => (
+                                  <li key={device.id} className="rounded hover:bg-muted">
+                                    <div 
+                                      className="flex items-center p-2 cursor-pointer"
+                                      onClick={() => toggleDeviceExpansion(device.id)}
                                     >
-                                      Select
-                                    </Button>
-                                  </div>
+                                      {expandedDevices.includes(device.id) ? 
+                                        <ChevronDown className="h-4 w-4 mr-1" /> : 
+                                        <ChevronRight className="h-4 w-4 mr-1" />
+                                      }
+                                      <Cpu className="h-4 w-4 mr-2" />
+                                      <span className="text-sm">{device.name}</span>
+                                    </div>
+                                  </li>
                                 ))}
-                              </div>
+                              </ul>
                             )}
-                          </div>
+                          </li>
                         ))}
-                      </div>
+                      </ul>
                     )}
-                  </div>
-                ))
-              )}
+                  </li>
+                  
+                  {/* Calculation Tag Section */}
+                  <li className="rounded hover:bg-muted">
+                    <div 
+                      className="flex items-center p-2 cursor-pointer"
+                      onClick={() => togglePortExpansion('calculation-tag')}
+                    >
+                      {expandedPorts.includes('calculation-tag') ? 
+                        <ChevronDown className="h-4 w-4 mr-1" /> : 
+                        <ChevronRight className="h-4 w-4 mr-1" />
+                      }
+                      <FileDigit className="h-4 w-4 mr-2" />
+                      <span className="text-sm">Calculation Tag</span>
+                    </div>
+                  </li>
+                  
+                  {/* User Tag Section */}
+                  <li className="rounded hover:bg-muted">
+                    <div 
+                      className="flex items-center p-2 cursor-pointer"
+                      onClick={() => togglePortExpansion('user-tag')}
+                    >
+                      {expandedPorts.includes('user-tag') ? 
+                        <ChevronDown className="h-4 w-4 mr-1" /> : 
+                        <ChevronRight className="h-4 w-4 mr-1" />
+                      }
+                      <UserCircle className="h-4 w-4 mr-2" />
+                      <span className="text-sm">User Tag</span>
+                    </div>
+                  </li>
+                  
+                  {/* System Tag Section */}
+                  <li className="rounded hover:bg-muted">
+                    <div 
+                      className="flex items-center p-2 cursor-pointer"
+                      onClick={() => togglePortExpansion('system-tag')}
+                    >
+                      {expandedPorts.includes('system-tag') ? 
+                        <ChevronDown className="h-4 w-4 mr-1" /> : 
+                        <ChevronRight className="h-4 w-4 mr-1" />
+                      }
+                      <Cog className="h-4 w-4 mr-2" />
+                      <span className="text-sm">System Tag</span>
+                    </div>
+                  </li>
+                  
+                  {/* Stats Tag Section */}
+                  <li className="rounded hover:bg-muted">
+                    <div 
+                      className="flex items-center p-2 cursor-pointer"
+                      onClick={() => togglePortExpansion('stats-tag')}
+                    >
+                      {expandedPorts.includes('stats-tag') ? 
+                        <ChevronDown className="h-4 w-4 mr-1" /> : 
+                        <ChevronRight className="h-4 w-4 mr-1" />
+                      }
+                      <BarChart className="h-4 w-4 mr-2" />
+                      <span className="text-sm">Stats Tag</span>
+                    </div>
+                  </li>
+                </ul>
+              </ScrollArea>
             </div>
-          </ScrollArea>
+            
+            {/* Right side: Tag content (3/4 width) */}
+            <div className="w-3/4 border rounded-md overflow-hidden">
+              <ScrollArea className="h-[450px]">
+                {/* Show IO Tag content if IO Tag section is selected and a port is expanded */}
+                {expandedPorts.includes('io-tag') && expandedPorts.some(id => ioPorts.some(port => port.id === id)) && (
+                  <div className="p-4">
+                    {ioPorts
+                      .filter(port => expandedPorts.includes(port.id))
+                      .map(port => (
+                        <div key={port.id} className="mb-4">
+                          <h3 className="text-lg font-medium mb-2">{port.name}</h3>
+                          {port.devices
+                            .filter(device => expandedDevices.includes(device.id))
+                            .map(device => (
+                              <div key={device.id} className="mb-4 ml-4">
+                                <h4 className="text-md font-medium mb-2">{device.name}</h4>
+                                <div className="border rounded-md overflow-hidden">
+                                  {device.tags && device.tags.length > 0 ? (
+                                    <Table>
+                                      <TableHeader>
+                                        <TableRow>
+                                          <TableHead>Name</TableHead>
+                                          <TableHead>Data Type</TableHead>
+                                          <TableHead>Address</TableHead>
+                                          <TableHead>Description</TableHead>
+                                          <TableHead>Action</TableHead>
+                                        </TableRow>
+                                      </TableHeader>
+                                      <TableBody>
+                                        {device.tags.map(tag => (
+                                          <TableRow key={tag.id}>
+                                            <TableCell>{tag.name}</TableCell>
+                                            <TableCell>{tag.dataType}</TableCell>
+                                            <TableCell>{tag.address}</TableCell>
+                                            <TableCell>{tag.description}</TableCell>
+                                            <TableCell>
+                                              <Button 
+                                                size="sm" 
+                                                onClick={() => selectTagFromTree(tag, device.name, port.name)}
+                                              >
+                                                Select
+                                              </Button>
+                                            </TableCell>
+                                          </TableRow>
+                                        ))}
+                                      </TableBody>
+                                    </Table>
+                                  ) : (
+                                    <div className="text-center p-4 text-muted-foreground">
+                                      No tags available for this device
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                        </div>
+                      ))}
+                  </div>
+                )}
+                
+                {/* Show placeholder if calculation tag section is selected */}
+                {expandedPorts.includes('calculation-tag') && (
+                  <div className="flex flex-col items-center justify-center h-full p-8 text-muted-foreground">
+                    <FileDigit className="h-12 w-12 mb-4 text-muted-foreground/50" />
+                    <p className="text-center">Calculation tags would be shown here based on the selected category</p>
+                  </div>
+                )}
+                
+                {/* Show placeholder if user tag section is selected */}
+                {expandedPorts.includes('user-tag') && (
+                  <div className="flex flex-col items-center justify-center h-full p-8 text-muted-foreground">
+                    <UserCircle className="h-12 w-12 mb-4 text-muted-foreground/50" />
+                    <p className="text-center">User tags would be shown here based on the selected category</p>
+                  </div>
+                )}
+                
+                {/* Show placeholder if system tag section is selected */}
+                {expandedPorts.includes('system-tag') && (
+                  <div className="flex flex-col items-center justify-center h-full p-8 text-muted-foreground">
+                    <Cog className="h-12 w-12 mb-4 text-muted-foreground/50" />
+                    <p className="text-center">System tags would be shown here based on the selected category</p>
+                  </div>
+                )}
+                
+                {/* Show placeholder if stats tag section is selected */}
+                {expandedPorts.includes('stats-tag') && (
+                  <div className="flex flex-col items-center justify-center h-full p-8 text-muted-foreground">
+                    <BarChart className="h-12 w-12 mb-4 text-muted-foreground/50" />
+                    <p className="text-center">Stats tags would be shown here based on the selected category</p>
+                  </div>
+                )}
+                
+                {/* Show default placeholder if no section is selected */}
+                {!expandedPorts.some(id => ['io-tag', 'calculation-tag', 'user-tag', 'system-tag', 'stats-tag'].includes(id)) && (
+                  <div className="flex flex-col items-center justify-center h-full p-8 text-muted-foreground">
+                    <Server className="h-12 w-12 mb-4 text-muted-foreground/50" />
+                    <p className="text-center">Select a tag category from the left panel to view available tags</p>
+                  </div>
+                )}
+              </ScrollArea>
+            </div>
+          </div>
           
           <DialogFooter>
             <Button variant="outline" onClick={() => setTagSelectionDialogOpen(false)}>
@@ -1267,10 +1493,6 @@ export function SNMPForm() {
                   <Button onClick={addGroup} size="sm" variant="outline" className="h-8">
                     <Plus className="h-4 w-4 mr-1" />
                     Add Group
-                  </Button>
-                  <Button onClick={deleteTags} size="sm" variant="outline" className="h-8 text-red-600 hover:text-red-700 hover:bg-red-50">
-                    <Trash2 className="h-4 w-4 mr-1" />
-                    Delete
                   </Button>
                 </div>
               </div>
