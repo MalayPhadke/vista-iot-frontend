@@ -42,7 +42,11 @@ import SecurityTab from "@/components/tabs/security-tab"
 import ProtocolsTab from "@/components/tabs/protocols-tab"
 import LogsTab from "@/components/tabs/logs-tab"
 import OverviewTab from "@/components/tabs/overview-tab"
+import DataCenterTab from "@/components/tabs/data-center-tab"
 import { MQTTForm } from "@/components/forms/mqtt-form"
+import { UserTagsForm } from "@/components/forms/user-tags-form"
+import { StatsTagsForm } from "@/components/forms/stats-tags-form"
+import { SystemTagsForm } from "@/components/forms/system-tags-form"
 import { RestartGatewayDialog } from "@/components/dialogs/restart-dialog"
 import { ExportConfigDialog } from "@/components/dialogs/export-config-dialog"
 import { ImportConfigDialog } from "@/components/dialogs/import-config-dialog"
@@ -471,6 +475,12 @@ function DashboardContent() {
                         selectedPortId={portId}
                         selectedDeviceId={deviceItemId}
                       />
+                    ) : section === 'user-tag' ? (
+                      <UserTagsForm />
+                    ) : section === 'stats-tag' ? (
+                      <StatsTagsForm />
+                    ) : section === 'system-tag' ? (
+                      <SystemTagsForm />
                     ) : section === 'calc-tag' ? (
                       <CalculationTagTab ioPorts={ioPorts} />
                     ) : (

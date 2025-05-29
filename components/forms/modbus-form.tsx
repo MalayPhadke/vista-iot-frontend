@@ -399,253 +399,9 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
           </CardContent>
         </Card>
 
-        {form.watch("enabled") && (
-          <>
-            <FormField
-              control={form.control}
-              name="mode"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Modbus Mode</FormLabel>
-                  <Select 
-                    onValueChange={(value) => {
-                      field.onChange(value)
-                      setActiveTab(value as "tcp" | "rtu")
-                    }} 
-                    defaultValue={field.value}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select mode" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="tcp">Modbus TCP</SelectItem>
-                      <SelectItem value="rtu">Modbus RTU</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </FormItem>
-              )}
-            />
-
-            {/* Save button moved below slave ID field */}
-
-            <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "tcp" | "rtu")}>
-              <TabsList>
-                <TabsTrigger value="tcp">TCP Settings</TabsTrigger>
-                <TabsTrigger value="rtu">RTU Settings</TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="tcp" className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="tcp.port"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>TCP Port</FormLabel>
-                      <FormControl>
-                        <Input 
-                          type="number" 
-                          {...field} 
-                          onChange={e => field.onChange(parseInt(e.target.value))}
-                          placeholder="502"
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="tcp.max_connections"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Max Connections</FormLabel>
-                      <FormControl>
-                        <Input 
-                          type="number" 
-                          {...field} 
-                          onChange={e => field.onChange(parseInt(e.target.value))}
-                          placeholder="5"
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="tcp.timeout"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Timeout (seconds)</FormLabel>
-                      <FormControl>
-                        <Input 
-                          type="number" 
-                          {...field} 
-                          onChange={e => field.onChange(parseInt(e.target.value))}
-                          placeholder="30"
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-              </TabsContent>
-
-              <TabsContent value="rtu" className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="serial.port"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Serial Port</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select port" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="ttyS0">/dev/ttyS0</SelectItem>
-                          <SelectItem value="ttyS1">/dev/ttyS1</SelectItem>
-                          <SelectItem value="ttyUSB0">/dev/ttyUSB0</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="serial.baudrate"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Baud Rate</FormLabel>
-                      <Select 
-                        onValueChange={(v) => field.onChange(parseInt(v))} 
-                        defaultValue={field.value.toString()}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select baud rate" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {[1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200].map(rate => (
-                            <SelectItem key={rate} value={rate.toString()}>
-                              {rate} bps
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="serial.data_bits"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Data Bits</FormLabel>
-                      <Select 
-                        onValueChange={(v) => field.onChange(parseInt(v))} 
-                        defaultValue={field.value.toString()}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select data bits" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {[5, 6, 7, 8].map(bits => (
-                            <SelectItem key={bits} value={bits.toString()}>
-                              {bits}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="serial.parity"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Parity</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select parity" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">None</SelectItem>
-                          <SelectItem value="even">Even</SelectItem>
-                          <SelectItem value="odd">Odd</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="serial.stop_bits"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Stop Bits</FormLabel>
-                      <Select 
-                        onValueChange={(v) => field.onChange(parseInt(v))} 
-                        defaultValue={field.value.toString()}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select stop bits" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="1">1</SelectItem>
-                          <SelectItem value="2">2</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </FormItem>
-                  )}
-                />
-              </TabsContent>
-            </Tabs>
-
-            <FormField
-              control={form.control}
-              name="slave_id"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Slave ID</FormLabel>
-                  <FormControl>
-                    <Input 
-                      type="number" 
-                      {...field} 
-                      onChange={e => field.onChange(parseInt(e.target.value))}
-                      placeholder="1"
-                    />
-                  </FormControl>
-                </FormItem>
-              )}
-            />
-
-            <div className="flex justify-end mt-6 mb-4">
-              <Button type="submit" disabled={isSaving}>
-                {isSaving ? (
-                  <>
-                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                    Saving...
-                  </>
-                ) : (
-                  'Save Changes'
-                )}
-              </Button>
-            </div>
-
-          </>
-        )}
-
         {/* If not separate, render advanced config inside the form */}
         {form.watch("enabled") && !separateAdvancedConfig && (
-          <Card className="mt-6">
-            <CardHeader>
-              <CardTitle>Advanced Modbus Configuration</CardTitle>
-            </CardHeader>
-            <CardContent>
+            <>
               <div className="space-y-4">
 
                 {/* Modbus TCP Settings */}
@@ -1214,8 +970,6 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
                   </CardContent>
                 </Card>
               </div>
-            </CardContent>
-            <CardFooter className="flex flex-col sm:flex-row justify-between gap-4">
               <Button variant="outline" className="w-full sm:w-auto">Discard Changes</Button>
               <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
                 <Button variant="outline" className="w-full sm:w-auto">
@@ -1228,8 +982,7 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
                   <Check className="h-4 w-4 mr-1" /> Apply Changes
                 </Button>
               </div>
-            </CardFooter>
-          </Card>
+            </>
         )}
 
         {/* Save button moved above the advanced configuration section */}
@@ -2089,4 +1842,3 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
     </Form>
   )
 }
-

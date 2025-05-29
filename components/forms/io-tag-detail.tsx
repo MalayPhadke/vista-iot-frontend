@@ -503,7 +503,6 @@ function TagForm({ onSave, onCancel, existingTag }: TagFormProps) {
                 <SelectContent>
                   <SelectItem value="Read/Write">Read/Write</SelectItem>
                   <SelectItem value="Read Only">Read Only</SelectItem>
-                  <SelectItem value="Write Only">Write Only</SelectItem>
                 </SelectContent>
               </Select>
             </div>

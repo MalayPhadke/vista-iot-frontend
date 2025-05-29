@@ -1435,6 +1435,7 @@ export function SNMPForm() {
                         <SelectValue placeholder="Select version" />
                       </SelectTrigger>
                       <SelectContent>
+                      <SelectItem value="v1">V1</SelectItem>
                         <SelectItem value="v2c">V2C</SelectItem>
                         <SelectItem value="v3">V3</SelectItem>
                       </SelectContent>

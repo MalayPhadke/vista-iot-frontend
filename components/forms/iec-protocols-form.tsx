@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import type React from "react"
+import React from "react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -17,6 +17,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { useToast } from "@/components/ui/use-toast"
+import { IEC61850Form } from "./iec61850-form"
 
 // Edit IP Dialog Component
 function EditIPDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
@@ -804,72 +805,13 @@ export function IECProtocolsForm() {
         </DialogContent>
       </Dialog>
       
-      <Tabs defaultValue="iec101">
+      <Tabs defaultValue="iec104">
         <TabsList className="mb-4">
-          <TabsTrigger value="iec101">IEC 60870-5-101</TabsTrigger>
           <TabsTrigger value="iec104">IEC 60870-5-104</TabsTrigger>
           <TabsTrigger value="iec61850">IEC 61850</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="iec101">
-          <Card>
-            <CardHeader>
-              <CardTitle>IEC 60870-5-101</CardTitle>
-              <CardDescription>Configure IEC 60870-5-101 settings</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="iec101-enabled">Enable IEC 60870-5-101</Label>
-                <Switch id="iec101-enabled" />
-              </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="iec101-mode">Mode</Label>
-                <Select defaultValue="master">
-                  <SelectTrigger id="iec101-mode">
-                    <SelectValue placeholder="Select mode" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="master">Master</SelectItem>
-                    <SelectItem value="slave">Slave</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="iec101-port">Serial Port</Label>
-                  <Select defaultValue="ttyS0">
-                    <SelectTrigger id="iec101-port">
-                      <SelectValue placeholder="Select port" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ttyS0">ttyS0</SelectItem>
-                      <SelectItem value="ttyS1">ttyS1</SelectItem>
-                      <SelectItem value="ttyUSB0">ttyUSB0</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="iec101-baud">Baud Rate</Label>
-                  <Select defaultValue="9600">
-                    <SelectTrigger id="iec101-baud">
-                      <SelectValue placeholder="Select baud rate" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="9600">9600</SelectItem>
-                      <SelectItem value="19200">19200</SelectItem>
-                      <SelectItem value="38400">38400</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </CardContent>
-            <CardFooter>
-              <Button type="submit">Save Changes</Button>
-            </CardFooter>
-          </Card>
-        </TabsContent>
 
         <TabsContent value="iec104">
           <div className="space-y-4">
@@ -1314,39 +1256,7 @@ export function IECProtocolsForm() {
         </TabsContent>
 
         <TabsContent value="iec61850">
-          <Card>
-            <CardHeader>
-              <CardTitle>IEC 61850</CardTitle>
-              <CardDescription>Configure IEC 61850 settings</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between">
-                <Label htmlFor="iec61850-enabled">Enable IEC 61850</Label>
-                <Switch id="iec61850-enabled" />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="iec61850-mode">Mode</Label>
-                <Select defaultValue="server">
-                  <SelectTrigger id="iec61850-mode">
-                    <SelectValue placeholder="Select mode" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="server">Server</SelectItem>
-                    <SelectItem value="client">Client</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="iec61850-port">MMS Port</Label>
-                <Input id="iec61850-port" placeholder="102" />
-              </div>
-            </CardContent>
-            <CardFooter>
-              <Button type="submit">Save Changes</Button>
-            </CardFooter>
-          </Card>
+          <IEC61850Form />
         </TabsContent>
       </Tabs>
     </form>
