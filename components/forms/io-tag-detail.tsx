@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { 
   Plus, 
   Edit, 
@@ -54,11 +54,40 @@ import {
 } from "@/components/ui/alert-dialog"
 import { useToast } from "@/components/ui/use-toast"
 
+const CONVERSION_OPTIONS = [
+  { value: "UINT, Big Endian (ABCD)", defaultLength: 16 },
+  { value: "INT, Big Endian (ABCD)", defaultLength: 16 },
+  { value: "UINT32, Modicon Double Precision (reg1*10000+reg2)", defaultLength: 32 },
+  { value: "FLOAT, Big Endian (ABCD)", defaultLength: 32 },
+  { value: "FLOAT, Big Endian, Swap Word (CDAB)", defaultLength: 32 },
+  { value: "INT, Big Endian, Swap Word (CDAB)", defaultLength: 16 },
+  { value: "UINT, Big Endian, Swap Word (CDAB)", defaultLength: 16 },
+  { value: "UINT, Packed BCD, Big Endian (ABCD)", defaultLength: 16 },
+  { value: "UINT, Packed BCD, Big Endian Swap Word (CDAB)", defaultLength: 16 },
+  { value: "INT, Little Endian (DCBA)", defaultLength: 16 },
+  { value: "UINT, Little Endian (DCBA)", defaultLength: 16 },
+  { value: "DOUBLE, Big Endian (ABCDEFGH)", defaultLength: 64 },
+  { value: "DOUBLE, Little Endian (HGFEDCBA)", defaultLength: 64 },
+  { value: "DOUBLE, Big Endian, Swap Byte (BADCFEHG)", defaultLength: 64 },
+  { value: "DOUBLE, Little Endian, Swap Byte (GHEFCDAB)", defaultLength: 64 },
+  { value: "FLOAT, Little Endian (DCBA)", defaultLength: 32 },
+  { value: "INT64, Big Endian (ABCDEFGH)", defaultLength: 64 },
+  { value: "INT64, Little Endian (HGFEDCBA)", defaultLength: 64 },
+  { value: "INT64, Big Endian, Swap Byte (BADCFEHG)", defaultLength: 64 },
+  { value: "INT64, Little Endian, Swap Byte (GHEFCDAB)", defaultLength: 64 },
+  { value: "UINT64, Big Endian (ABCDEFGH)", defaultLength: 64 },
+  { value: "UINT64, Little Endian (HGFEDCBA)", defaultLength: 64 },
+  { value: "UINT64, Big Endian, Swap Byte (BADCFEHG)", defaultLength: 64 },
+  { value: "UINT64, Little Endian, Swap Byte (GHEFCDAB)", defaultLength: 64 },
+  { value: "INT, Text to Number", defaultLength: 16 },
+];
+
 // Define the IOTag interface
 export interface IOTag {
   id: string
   name: string
   dataType: string
+  registerType?: string // Added for register type
   address: string
   description: string
   source?: string
@@ -77,6 +106,10 @@ export interface IOTag {
   clampToLow?: boolean
   clampToHigh?: boolean
   clampToZero?: boolean
+  // New fields for Discrete type
+  signalReversal?: boolean
+  value0?: string
+  value1?: string
 }
 
 interface Device {
@@ -317,7 +350,8 @@ function TagForm({ onSave, onCancel, existingTag }: TagFormProps) {
   // Form state
   const [name, setName] = useState(existingTag?.name || "")
   const [dataType, setDataType] = useState(existingTag?.dataType || "Analog")
-  const [conversion, setConversion] = useState(existingTag?.conversionType || "FLOAT, Big Endian (ABCD)")
+  const [registerType, setRegisterType] = useState(existingTag?.registerType || "")
+  const [conversion, setConversion] = useState(existingTag?.conversionType || "") // Default to empty or existing
   const [address, setAddress] = useState(existingTag?.address || "")
   const [startBit, setStartBit] = useState(existingTag?.startBit || 0)
   const [lengthBit, setLengthBit] = useState(existingTag?.lengthBit || 64)
@@ -327,8 +361,61 @@ function TagForm({ onSave, onCancel, existingTag }: TagFormProps) {
   const [scanRate, setScanRate] = useState(existingTag?.scanRate || 1)
   const [readWrite, setReadWrite] = useState(existingTag?.readWrite || "Read/Write")
   const [description, setDescription] = useState(existingTag?.description || "")
-  
-  // Advanced tab
+  // New state for Discrete fields
+  const [signalReversal, setSignalReversal] = useState(existingTag?.signalReversal ?? false)
+  const [value0, setValue0] = useState(existingTag?.value0 || "")
+  const [value1, setValue1] = useState(existingTag?.value1 || "")
+
+  // When dataType changes, reset registerType and set default if applicable
+  useEffect(() => {
+    // Manage dependent fields and active tab when dataType changes
+    if (dataType === "Analog") {
+      setRegisterType(existingTag?.registerType && existingTag?.dataType === "Analog" ? existingTag.registerType : "Coil");
+      // If a conversion is already selected, its length will be set by the other useEffect.
+      // Otherwise, default to 64 or existing if no specific conversion is yet picked.
+      if (!conversion) {
+        setLengthBit(existingTag?.lengthBit || 64);
+      }
+      if (activeTab === "tagValueDescriptor") {
+        setActiveTab("basic");
+      }
+    } else if (dataType === "Discrete") {
+      setRegisterType(existingTag?.registerType && existingTag?.dataType === "Discrete" ? existingTag.registerType : "Input");
+      setLengthBit(1); // Fixed length for Discrete
+      setSignalReversal(existingTag?.signalReversal ?? false);
+      setValue0(existingTag?.value0 || ""); // Default to empty string
+      setValue1(existingTag?.value1 || ""); // Default to empty string
+      // If switching to Discrete and the advanced tab was for analog, switch to basic
+      if (activeTab === "advanced") {
+        setActiveTab("basic");
+      }
+    } else {
+      // Fallback for other types or if dataType is cleared
+      setRegisterType("");
+      setLengthBit(existingTag?.lengthBit || 64); // Or some other sensible default
+      if (activeTab === "tagValueDescriptor" || activeTab === "advanced") {
+        setActiveTab("basic");
+      }
+    }
+  }, [dataType, conversion, existingTag?.dataType, existingTag?.registerType, existingTag?.lengthBit, existingTag?.signalReversal, existingTag?.value0, existingTag?.value1, activeTab]);
+
+  // Effect to update lengthBit based on selected conversion for Analog type
+  useEffect(() => {
+    if (dataType === "Analog" && conversion) {
+      const selectedOption = CONVERSION_OPTIONS.find(opt => opt.value === conversion);
+      if (selectedOption) {
+        setLengthBit(selectedOption.defaultLength);
+      } else {
+        // If conversion is somehow not in our list, revert to a default or make editable
+        // For now, let's assume it will always be in the list if selected.
+        // Consider setting a general default like 64 if needed, or clear it to force user input if not read-only.
+        setLengthBit(existingTag?.lengthBit || 64); 
+      }
+    } else if (dataType !== "Analog") {
+      // If not Analog, lengthBit is handled by the other useEffect (e.g., set to 1 for Discrete)
+    }
+  }, [dataType, conversion, existingTag?.lengthBit]);
+
   const [scaleType, setScaleType] = useState(existingTag?.scaleType || "No Scale")
   const [formula, setFormula] = useState(existingTag?.formula || "")
   const [scale, setScale] = useState(existingTag?.scale || 1)
@@ -344,10 +431,11 @@ function TagForm({ onSave, onCancel, existingTag }: TagFormProps) {
       id: existingTag?.id || `tag-${Date.now()}`,
       name,
       dataType,
+      registerType,
       conversionType: conversion,
       address,
       startBit,
-      lengthBit,
+      lengthBit: dataType === "Discrete" ? 1 : lengthBit, // Set lengthBit to 1 if Discrete
       spanLow,
       spanHigh,
       defaultValue,
@@ -360,7 +448,11 @@ function TagForm({ onSave, onCancel, existingTag }: TagFormProps) {
       offset,
       clampToLow,
       clampToHigh,
-      clampToZero
+      clampToZero,
+      // Add new discrete fields
+      signalReversal: dataType === "Discrete" ? signalReversal : undefined,
+      value0: dataType === "Discrete" ? value0 : undefined,
+      value1: dataType === "Discrete" ? value1 : undefined
     }
     
     onSave(newTag)
@@ -371,7 +463,12 @@ function TagForm({ onSave, onCancel, existingTag }: TagFormProps) {
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="w-full">
           <TabsTrigger value="basic" className="flex-1">Basic</TabsTrigger>
-          <TabsTrigger value="advanced" className="flex-1">Advanced</TabsTrigger>
+          {dataType === "Analog" && (
+            <TabsTrigger value="advanced" className="flex-1">Advanced</TabsTrigger>
+          )}
+          {dataType === "Discrete" && (
+            <TabsTrigger value="tagValueDescriptor" className="flex-1">Tag Value Descriptor</TabsTrigger>
+          )}
         </TabsList>
         
         <TabsContent value="basic" className="space-y-4 pt-4">
@@ -395,14 +492,60 @@ function TagForm({ onSave, onCancel, existingTag }: TagFormProps) {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Analog">Analog</SelectItem>
-                  <SelectItem value="Digital">Digital</SelectItem>
-                  <SelectItem value="String">String</SelectItem>
-                  <SelectItem value="Integer">Integer</SelectItem>
-                  <SelectItem value="Float">Float</SelectItem>
+                  <SelectItem value="Discrete">Discrete</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="registerType">Register Type</Label>
+              <Select 
+                value={registerType} 
+                onValueChange={setRegisterType}
+                disabled={!dataType} // Disable if dataType is not selected
+              >
+                <SelectTrigger id="registerType">
+                  <SelectValue placeholder="Select register type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {dataType === "Analog" && (
+                    <>
+                      <SelectItem value="Coil">Coil</SelectItem>
+                      <SelectItem value="Discrete Inputs">Discrete Inputs</SelectItem>
+                    </>
+                  )}
+                  {dataType === "Discrete" && (
+                    <>
+                      <SelectItem value="Input">Input</SelectItem>
+                      <SelectItem value="Holding">Holding</SelectItem>
+                    </>
+                  )}
+                  {/* Show a disabled item if dataType is not selected or doesn't match Analog/Discrete */}
+                  {(!dataType || (dataType !== "Analog" && dataType !== "Discrete")) && 
+                    <SelectItem value="" disabled>Select Data Type first</SelectItem>}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {dataType === "Discrete" && (
+              <div className="space-y-2">
+                <Label htmlFor="signalReversal">Signal Reversal</Label>
+                <Select 
+                  value={signalReversal ? "True" : "False"} 
+                  onValueChange={(value) => setSignalReversal(value === "True")}
+                >
+                  <SelectTrigger id="signalReversal">
+                    <SelectValue placeholder="Select signal reversal" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="False">False</SelectItem>
+                    <SelectItem value="True">True</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             
+            {dataType === "Analog" && (
             <div className="space-y-2">
               <Label htmlFor="conversion">Conversion</Label>
               <Select value={conversion} onValueChange={setConversion}>
@@ -410,15 +553,15 @@ function TagForm({ onSave, onCancel, existingTag }: TagFormProps) {
                   <SelectValue placeholder="Select conversion type" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="INT64, Little Endian, Swap Byte (GHEFDCBA)">INT64, Little Endian, Swap Byte (GHEFDCBA)</SelectItem>
-                  <SelectItem value="UINT, Big Endian (ABCD)">UINT, Big Endian (ABCD)</SelectItem>
-                  <SelectItem value="FLOAT, Big Endian (ABCD)">FLOAT, Big Endian (ABCD)</SelectItem>
-                  <SelectItem value="FLOAT, Little Endian (DCBA)">FLOAT, Little Endian (DCBA)</SelectItem>
-                  <SelectItem value="DOUBLE, Big Endian (ABCDEFGH)">DOUBLE, Big Endian (ABCDEFGH)</SelectItem>
-                  <SelectItem value="DOUBLE, Little Endian (HGFEDCBA)">DOUBLE, Little Endian (HGFEDCBA)</SelectItem>
+                  {CONVERSION_OPTIONS.map(opt => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.value}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
+            )}
             
             <div className="space-y-2">
               <Label htmlFor="address">Address</Label>
@@ -442,17 +585,27 @@ function TagForm({ onSave, onCancel, existingTag }: TagFormProps) {
               />
             </div>
             
+            {/* Length (bit) - Conditional display and behavior */}
+            {(dataType === "Analog" || dataType === "Discrete") && (
             <div className="space-y-2">
               <Label htmlFor="lengthBit">Length (bit)</Label>
               <Input
                 id="lengthBit"
                 type="number"
                 value={lengthBit}
-                onChange={(e) => setLengthBit(Number(e.target.value))}
+                onChange={(e) => {
+                  // Only allow manual change if Analog and no specific conversion is selected (or if conversion doesn't dictate length)
+                  if (dataType === "Analog" && !CONVERSION_OPTIONS.find(opt => opt.value === conversion)) {
+                    setLengthBit(Number(e.target.value));
+                  }
+                }}
+                readOnly={dataType === "Discrete" || (dataType === "Analog" && !!CONVERSION_OPTIONS.find(opt => opt.value === conversion))} // Read-only for Discrete or if Analog and conversion selected
                 min={1}
               />
             </div>
+            )}
             
+            {dataType === "Analog" && (
             <div className="space-y-2">
               <Label htmlFor="spanLow">Span Low</Label>
               <Input
@@ -462,7 +615,9 @@ function TagForm({ onSave, onCancel, existingTag }: TagFormProps) {
                 onChange={(e) => setSpanLow(Number(e.target.value))}
               />
             </div>
+            )}
             
+            {dataType === "Analog" && (
             <div className="space-y-2">
               <Label htmlFor="spanHigh">Span High</Label>
               <Input
@@ -472,6 +627,7 @@ function TagForm({ onSave, onCancel, existingTag }: TagFormProps) {
                 onChange={(e) => setSpanHigh(Number(e.target.value))}
               />
             </div>
+            )}
             
             <div className="space-y-2">
               <Label htmlFor="defaultValue">Default Value</Label>
@@ -520,6 +676,7 @@ function TagForm({ onSave, onCancel, existingTag }: TagFormProps) {
           </div>
         </TabsContent>
         
+        {dataType === "Analog" && (
         <TabsContent value="advanced" className="space-y-4 pt-4">
           <div className="space-y-6">
             <div className="space-y-2">
@@ -607,9 +764,35 @@ function TagForm({ onSave, onCancel, existingTag }: TagFormProps) {
             </div>
           </div>
         </TabsContent>
+        )}
+
+        {dataType === "Discrete" && (
+          <TabsContent value="tagValueDescriptor" className="space-y-4 pt-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="value0">Value 0</Label>
+                <Input
+                  id="value0"
+                  value={value0}
+                  onChange={(e) => setValue0(e.target.value)}
+                  placeholder="Enter description for value 0"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="value1">Value 1</Label>
+                <Input
+                  id="value1"
+                  value={value1}
+                  onChange={(e) => setValue1(e.target.value)}
+                  placeholder="Enter description for value 1"
+                />
+              </div>
+            </div>
+          </TabsContent>
+        )}
       </Tabs>
       
-      <DialogFooter className="mt-6">
+      <DialogFooter className="pt-6">
         <Button variant="outline" type="button" onClick={onCancel}>Close</Button>
         <Button type="submit">OK</Button>
       </DialogFooter>
