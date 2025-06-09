@@ -9,9 +9,9 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { useConfigStore } from "@/lib/stores/configuration-store"
-import { useState } from "react"
-import { RefreshCw } from "lucide-react"
-import { toast } from "sonner"
+// import { useState } from "react" // isSaving removed
+// import { RefreshCw } from "lucide-react" // Removed
+// import { toast } from "sonner" // Removed
 
 const wifiFormSchema = z.object({
   enabled: z.boolean(),
@@ -38,7 +38,8 @@ const wifiFormSchema = z.object({
 
 export function WifiSettingsForm() {
   const { updateConfig, getConfig } = useConfigStore()
-  const [isSaving, setIsSaving] = useState(false)
+  // const [isSaving, setIsSaving] = useState(false) // Removed
+  const interfacePath = ['network', 'interfaces', 'wlan0']
 
   const form = useForm<z.infer<typeof wifiFormSchema>>({
     resolver: zodResolver(wifiFormSchema),
@@ -47,33 +48,34 @@ export function WifiSettingsForm() {
       mode: getConfig().network.interfaces.wlan0.mode,
       wifi: getConfig().network.interfaces.wlan0.wifi,
       ipv4: getConfig().network.interfaces.wlan0.ipv4
-    }
+    },
+    mode: "onChange",
   })
 
-  const onSubmit = async (values: z.infer<typeof wifiFormSchema>) => {
-    setIsSaving(true)
-    try {
-      updateConfig(['network', 'interfaces', 'wlan0'], {
-        ...getConfig().network.interfaces.wlan0,
-        ...values
-      })
+  // const onSubmit = async (values: z.infer<typeof wifiFormSchema>) => { // Removed
+  //   setIsSaving(true)
+  //   try {
+  //     updateConfig(interfacePath, {
+  //       ...getConfig().network.interfaces.wlan0,
+  //       ...values
+  //     })
       
-      toast.success('WiFi settings saved successfully!', {
-        duration: 3000
-      })
-    } catch (error) {
-      console.error('Error saving WiFi settings:', error)
-      toast.error('Failed to save WiFi settings', {
-        duration: 5000
-      })
-    } finally {
-      setIsSaving(false)
-    }
-  }
+  //     toast.success('WiFi settings saved successfully!', {
+  //       duration: 3000
+  //     })
+  //   } catch (error) {
+  //     console.error('Error saving WiFi settings:', error)
+  //     toast.error('Failed to save WiFi settings', {
+  //       duration: 5000
+  //     })
+  //   } finally {
+  //     setIsSaving(false)
+  //   }
+  // }
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      <form className="space-y-6"> {/* Removed onSubmit */}
         <FormField
           control={form.control}
           name="enabled"
@@ -88,7 +90,10 @@ export function WifiSettingsForm() {
               <FormControl>
                 <Switch
                   checked={field.value}
-                  onCheckedChange={field.onChange}
+                  onCheckedChange={(value) => {
+                    field.onChange(value)
+                    updateConfig([...interfacePath, 'enabled'], value)
+                  }}
                 />
               </FormControl>
             </FormItem>
@@ -101,10 +106,18 @@ export function WifiSettingsForm() {
           render={({ field }) => (
             <FormItem>
               <FormLabel>WiFi Mode</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select mode" />
-                </SelectTrigger>
+              <Select
+                onValueChange={(value) => {
+                  field.onChange(value)
+                  updateConfig([...interfacePath, 'mode'], value)
+                }}
+                defaultValue={field.value}
+              >
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select mode" />
+                  </SelectTrigger>
+                </FormControl>
                 <SelectContent>
                   <SelectItem value="client">Client (Station)</SelectItem>
                   <SelectItem value="ap">Access Point</SelectItem>
@@ -121,7 +134,14 @@ export function WifiSettingsForm() {
             <FormItem>
               <FormLabel>SSID</FormLabel>
               <FormControl>
-                <Input {...field} placeholder="Enter network name" />
+                <Input
+                  {...field}
+                  placeholder="Enter network name"
+                  onChange={(e) => {
+                    field.onChange(e.target.value)
+                    updateConfig([...interfacePath, 'wifi', 'ssid'], e.target.value)
+                  }}
+                />
               </FormControl>
             </FormItem>
           )}
@@ -133,10 +153,18 @@ export function WifiSettingsForm() {
           render={({ field }) => (
             <FormItem>
               <FormLabel>Security</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select security mode" />
-                </SelectTrigger>
+              <Select
+                onValueChange={(value) => {
+                  field.onChange(value)
+                  updateConfig([...interfacePath, 'wifi', 'security', 'mode'], value)
+                }}
+                defaultValue={field.value}
+              >
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select security mode" />
+                  </SelectTrigger>
+                </FormControl>
                 <SelectContent>
                   <SelectItem value="none">None</SelectItem>
                   <SelectItem value="wep">WEP</SelectItem>
@@ -156,7 +184,14 @@ export function WifiSettingsForm() {
               <FormItem>
                 <FormLabel>Password</FormLabel>
                 <FormControl>
-                  <Input type="password" {...field} />
+                  <Input
+                    type="password"
+                    {...field}
+                    onChange={(e) => {
+                      field.onChange(e.target.value)
+                      updateConfig([...interfacePath, 'wifi', 'security', 'password'], e.target.value)
+                    }}
+                  />
                 </FormControl>
               </FormItem>
             )}
@@ -169,10 +204,18 @@ export function WifiSettingsForm() {
           render={({ field }) => (
             <FormItem>
               <FormLabel>Channel</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select channel" />
-                </SelectTrigger>
+              <Select
+                onValueChange={(value) => {
+                  field.onChange(value)
+                  updateConfig([...interfacePath, 'wifi', 'channel'], value)
+                }}
+                defaultValue={field.value}
+              >
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select channel" />
+                  </SelectTrigger>
+                </FormControl>
                 <SelectContent>
                   <SelectItem value="auto">Auto</SelectItem>
                   {[...Array(11)].map((_, i) => (
@@ -192,10 +235,18 @@ export function WifiSettingsForm() {
           render={({ field }) => (
             <FormItem>
               <FormLabel>Band</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select band" />
-                </SelectTrigger>
+              <Select
+                onValueChange={(value) => {
+                  field.onChange(value)
+                  updateConfig([...interfacePath, 'wifi', 'band'], value)
+                }}
+                defaultValue={field.value}
+              >
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select band" />
+                  </SelectTrigger>
+                </FormControl>
                 <SelectContent>
                   <SelectItem value="2.4">2.4 GHz</SelectItem>
                   <SelectItem value="5">5 GHz</SelectItem>
@@ -219,7 +270,10 @@ export function WifiSettingsForm() {
               <FormControl>
                 <Switch
                   checked={field.value}
-                  onCheckedChange={field.onChange}
+                  onCheckedChange={(value) => {
+                    field.onChange(value)
+                    updateConfig([...interfacePath, 'wifi', 'hidden'], value)
+                  }}
                 />
               </FormControl>
             </FormItem>
@@ -232,10 +286,18 @@ export function WifiSettingsForm() {
           render={({ field }) => (
             <FormItem>
               <FormLabel>IP Configuration</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select IP mode" />
-                </SelectTrigger>
+              <Select
+                onValueChange={(value) => {
+                  field.onChange(value)
+                  updateConfig([...interfacePath, 'ipv4', 'mode'], value)
+                }}
+                defaultValue={field.value}
+              >
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select IP mode" />
+                  </SelectTrigger>
+                </FormControl>
                 <SelectContent>
                   <SelectItem value="dhcp">DHCP</SelectItem>
                   <SelectItem value="static">Static IP</SelectItem>
@@ -254,7 +316,14 @@ export function WifiSettingsForm() {
                 <FormItem>
                   <FormLabel>IP Address</FormLabel>
                   <FormControl>
-                    <Input {...field} placeholder="192.168.1.100" />
+                    <Input
+                      {...field}
+                      placeholder="192.168.1.100"
+                      onChange={(e) => {
+                        field.onChange(e.target.value)
+                        updateConfig([...interfacePath, 'ipv4', 'static', 'address'], e.target.value)
+                      }}
+                    />
                   </FormControl>
                 </FormItem>
               )}
@@ -267,7 +336,14 @@ export function WifiSettingsForm() {
                 <FormItem>
                   <FormLabel>Subnet Mask</FormLabel>
                   <FormControl>
-                    <Input {...field} placeholder="255.255.255.0" />
+                    <Input
+                      {...field}
+                      placeholder="255.255.255.0"
+                      onChange={(e) => {
+                        field.onChange(e.target.value)
+                        updateConfig([...interfacePath, 'ipv4', 'static', 'netmask'], e.target.value)
+                      }}
+                    />
                   </FormControl>
                 </FormItem>
               )}
@@ -280,7 +356,14 @@ export function WifiSettingsForm() {
                 <FormItem>
                   <FormLabel>Gateway</FormLabel>
                   <FormControl>
-                    <Input {...field} placeholder="192.168.1.1" />
+                    <Input
+                      {...field}
+                      placeholder="192.168.1.1"
+                      onChange={(e) => {
+                        field.onChange(e.target.value)
+                        updateConfig([...interfacePath, 'ipv4', 'static', 'gateway'], e.target.value)
+                      }}
+                    />
                   </FormControl>
                 </FormItem>
               )}
@@ -288,7 +371,7 @@ export function WifiSettingsForm() {
           </>
         )}
 
-        <Button type="submit" disabled={isSaving}>
+        {/* <Button type="submit" disabled={isSaving}> // Removed
           {isSaving ? (
             <>
               <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
@@ -297,7 +380,7 @@ export function WifiSettingsForm() {
           ) : (
             'Save Changes'
           )}
-        </Button>
+        </Button> */}
       </form>
     </Form>
   )

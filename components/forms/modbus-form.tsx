@@ -13,8 +13,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useConfigStore } from "@/lib/stores/configuration-store"
 import React, { useState, useEffect, createContext, useContext } from "react"
-import { RefreshCw, Plus, X, FileSpreadsheet, Download, Upload, Check, Trash2, ChevronDown, ChevronRight, Server, Cpu, Tag, UserCircle, FileDigit, BarChart, Cog, Terminal } from "lucide-react"
-import { toast } from "sonner"
+import { Plus, X, FileSpreadsheet, Download, Upload, Check, Trash2, ChevronDown, ChevronRight, Server, Cpu, Tag, UserCircle, FileDigit, BarChart, Cog, Terminal } from "lucide-react" // Removed RefreshCw
+// import { toast } from "sonner" // Removed toast
 import { Checkbox } from "@/components/ui/checkbox"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -26,18 +26,21 @@ const modbusFormSchema = z.object({
   enabled: z.boolean(),
   mode: z.enum(["tcp", "rtu"]),
   tcp: z.object({
+    enabled: z.boolean(),
     port: z.number().min(1).max(65535),
     max_connections: z.number().min(1).max(100),
-    timeout: z.number().min(1).max(3600)
+    timeout: z.number().min(1).max(3600),
+    rtu_over_tcp: z.boolean()
   }),
   serial: z.object({
+    enabled: z.boolean(),
     port: z.string(),
     baudrate: z.number().min(1200).max(115200),
     data_bits: z.number().min(5).max(8),
     parity: z.enum(["none", "even", "odd"]),
-    stop_bits: z.number().min(1).max(2)
+    stop_bits: z.number().min(1).max(2),
   }),
-  slave_id: z.number().min(1).max(247)
+  slave_id: z.number().min(1).max(247),
 })
 
 type ModbusFormValues = z.infer<typeof modbusFormSchema>
@@ -118,15 +121,7 @@ export const useIOPorts = () => useContext(IOPortsContext);
 
 export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) {
   const { updateConfig, getConfig } = useConfigStore()
-  const [isSaving, setIsSaving] = useState(false)
-  const [activeTab, setActiveTab] = useState<"tcp" | "rtu">("tcp")
-  
-  // State for Modbus TCP settings
-  const [modbusTcpEnabled, setModbusTcpEnabled] = useState(true)
-  const [modbusTcpPort, setModbusTcpPort] = useState(502)
-  const [modbusTcpMaxUsers, setModbusTcpMaxUsers] = useState(4)
-  const [modbusTcpIdleTime, setModbusTcpIdleTime] = useState(120)
-  const [modbusRtuOverTcp, setModbusRtuOverTcp] = useState(false)
+  // const [activeTab, setActiveTab] = useState<"tcp" | "rtu">("tcp") // Replaced by form.watch("mode")
   
   // State for tag selection dialog
   const [tagSelectionDialogOpen, setTagSelectionDialogOpen] = useState(false)
@@ -136,14 +131,6 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
   const [ioPorts, setIoPorts] = useState<Port[]>([])
   const [expandedPorts, setExpandedPorts] = useState<string[]>([])
   const [expandedDevices, setExpandedDevices] = useState<string[]>([])
-  
-  // State for Modbus RTU settings
-  const [modbusRtuEnabled, setModbusRtuEnabled] = useState(false)
-  const [modbusRtuPort, setModbusRtuPort] = useState("COM1")
-  const [modbusRtuBaudRate, setModbusRtuBaudRate] = useState(9600)
-  const [modbusRtuDataBit, setModbusRtuDataBit] = useState(8)
-  const [modbusRtuStopBit, setModbusRtuStopBit] = useState(1)
-  const [modbusRtuParity, setModbusRtuParity] = useState<"none" | "even" | "odd">("none")
   
   // State for device and tags
   const [devices, setDevices] = useState<ModbusDevice[]>([
@@ -164,11 +151,14 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
       enabled: false,
       mode: "tcp",
       tcp: {
+        enabled: true,
         port: 502,
         max_connections: 5,
-        timeout: 60
+        timeout: 60,
+        rtu_over_tcp: false
       },
       serial: {
+        enabled: false,
         port: "/dev/ttyUSB0",
         baudrate: 9600,
         data_bits: 8,
@@ -213,28 +203,31 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
     const config = getConfig()?.protocols?.modbus;
     
     if (config) {
-      setModbusTcpEnabled(config.tcp?.enabled || false)
-      setModbusTcpPort(config.tcp?.port || 502)
-      setModbusTcpMaxUsers(config.tcp?.max_connections || 4)
-      setModbusTcpIdleTime(config.tcp?.timeout || 120)
-      setModbusRtuOverTcp(config.tcp?.rtu_over_tcp || false)
+      // setModbusTcpEnabled(config.tcp?.enabled || false) // replaced by form state
+      // setModbusTcpPort(config.tcp?.port || 502) // replaced by form state
+      // setModbusTcpMaxUsers(config.tcp?.max_connections || 4) // replaced by form state
+      // setModbusTcpIdleTime(config.tcp?.timeout || 120) // replaced by form state
+      // setModbusRtuOverTcp(config.tcp?.rtu_over_tcp || false) // replaced by form state
       
-      setModbusRtuEnabled(config.rtu?.enabled || false)
-      setModbusRtuPort(config.rtu?.port || "COM1")
-      setModbusRtuBaudRate(config.rtu?.baudrate || 9600)
-      setModbusRtuDataBit(config.rtu?.data_bits || 8)
-      setModbusRtuStopBit(config.rtu?.stop_bits || 1)
-      setModbusRtuParity(config.rtu?.parity || "none")
+      // setModbusRtuEnabled(config.rtu?.enabled || false) // replaced by form state
+      // setModbusRtuPort(config.rtu?.port || "COM1") // replaced by form state
+      // setModbusRtuBaudRate(config.rtu?.baudrate || 9600) // replaced by form state
+      // setModbusRtuDataBit(config.rtu?.data_bits || 8) // replaced by form state
+      // setModbusRtuStopBit(config.rtu?.stop_bits || 1) // replaced by form state
+      // setModbusRtuParity(config.rtu?.parity || "none") // replaced by form state
       
       form.reset({
         enabled: config.enabled || false,
-        mode: config.mode || "tcp",
+        mode: config.mode || "tcp", // This will drive the Tabs component
         tcp: {
+          enabled: config.tcp?.enabled || true,
           port: config.tcp?.port || 502,
           max_connections: config.tcp?.max_connections || 4,
-          timeout: config.tcp?.timeout || 120
+          timeout: config.tcp?.timeout || 120,
+          rtu_over_tcp: config.tcp?.rtu_over_tcp || false
         },
         serial: {
+          enabled: config.rtu?.enabled || false,
           port: config.rtu?.port || "COM1",
           baudrate: config.rtu?.baudrate || 9600,
           data_bits: config.rtu?.data_bits || 8,
@@ -244,7 +237,7 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
         slave_id: config.slave_id || 1
       })
       
-      setActiveTab(config.mode || "tcp")
+      // setActiveTab(config.mode || "tcp") // No longer needed
     }
     
     fetchIoPorts()
@@ -268,36 +261,13 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
     }
   }, []);
 
-  const onSubmit = async (values: ModbusFormValues) => {
-    setIsSaving(true)
-    try {
-      updateConfig(['protocols', 'modbus'], {
-        enabled: values.enabled,
-        mode: values.mode,
-        tcp: values.tcp,
-        serial: values.serial,
-        slave_id: values.slave_id
-      })
-      toast.success('Modbus settings saved successfully!', {
-        duration: 3000
-      })
-    } catch (error) {
-      console.error('Error saving Modbus settings:', error)
-      toast.error('Failed to save Modbus settings', {
-        duration: 5000
-      })
-    } finally {
-      setIsSaving(false)
-    }
-  }
-
   // Helper functions
-  const handleTabChange = (tabId: string) => {
-    setConfigTabs(prev => prev.map(tab => ({
-      ...tab,
-      active: tab.id === tabId
-    })))
-  }
+  // const handleTabChange = (tabId: string) => { // Removed
+  //   setConfigTabs(prev => prev.map(tab => ({
+  //     ...tab,
+  //     active: tab.id === tabId
+  //   })))
+  // }
   
   const handleDeviceIdChange = (value: number) => {
     setSelectedDeviceId(value)
@@ -373,7 +343,7 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit as any)} className="space-y-6">
+      <form className="space-y-6">
         <Card>
           <CardContent className="pt-6">
             <FormField
@@ -390,7 +360,10 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
                   <FormControl>
                     <Switch
                       checked={field.value}
-                      onCheckedChange={field.onChange}
+                      onCheckedChange={(value) => {
+                        field.onChange(value)
+                        updateConfig(['protocols', 'modbus', 'enabled'], value)
+                      }}
                     />
                   </FormControl>
                 </FormItem>
@@ -399,185 +372,356 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
           </CardContent>
         </Card>
 
+        <FormField
+          control={form.control}
+          name="slave_id"
+          render={({ field }) => (
+            <Card>
+              <CardContent className="pt-6">
+                <FormItem>
+                  <FormLabel>Slave ID</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="number"
+                      placeholder="1"
+                      {...field}
+                      onChange={(e) => {
+                        const value = parseInt(e.target.value)
+                        field.onChange(value)
+                        updateConfig(['protocols', 'modbus', 'slave_id'], value)
+                      }}
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    The Modbus slave ID for this device (1-247).
+                  </FormDescription>
+                </FormItem>
+              </CardContent>
+            </Card>
+          )}
+        />
+
         {/* If not separate, render advanced config inside the form */}
         {form.watch("enabled") && !separateAdvancedConfig && (
             <>
-              <div className="space-y-4">
+              <Tabs
+                value={form.watch("mode")}
+                onValueChange={(value) => {
+                  if (value === "tcp" || value === "rtu") {
+                    form.setValue("mode", value);
+                    updateConfig(['protocols', 'modbus', 'mode'], value);
+                  }
+                }}
+                className="space-y-4"
+              >
+                <TabsList>
+                  <TabsTrigger value="tcp">Modbus TCP</TabsTrigger>
+                  <TabsTrigger value="rtu">Modbus RTU</TabsTrigger>
+                </TabsList>
 
-                {/* Modbus TCP Settings */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <TabsContent value="tcp" className="space-y-4">
                   <Card>
                     <CardHeader className="pb-2">
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                         <CardTitle className="text-base">Modbus TCP Settings</CardTitle>
-                        <div className="flex items-center space-x-2">
-                          <span className="text-xs">Enable</span>
-                          <Switch 
-                            checked={modbusTcpEnabled} 
-                            onCheckedChange={setModbusTcpEnabled} 
-                          />
-                        </div>
+                        <FormField
+                          control={form.control}
+                          name="tcp.enabled"
+                          render={({ field }) => (
+                            <FormItem className="flex items-center space-x-2">
+                              <FormLabel className="text-xs">Enable</FormLabel>
+                              <FormControl>
+                                <Switch
+                                  checked={field.value}
+                                  onCheckedChange={(value) => {
+                                    field.onChange(value)
+                                    updateConfig(['protocols', 'modbus', 'tcp', 'enabled'], value)
+                                  }}
+                                />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
                       </div>
                     </CardHeader>
                     <CardContent>
-                      {modbusTcpEnabled && (
+                      {form.watch("tcp.enabled") && (
                         <div className="space-y-3">
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <div className="space-y-1">
-                              <Label htmlFor="tcp-port">Port</Label>
-                              <Input 
-                                id="tcp-port" 
-                                type="number" 
-                                value={modbusTcpPort} 
-                                onChange={(e) => setModbusTcpPort(parseInt(e.target.value))} 
-                                placeholder="502" 
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <Label htmlFor="tcp-max-users">Max Users</Label>
-                              <Input 
-                                id="tcp-max-users" 
-                                type="number" 
-                                value={modbusTcpMaxUsers} 
-                                onChange={(e) => setModbusTcpMaxUsers(parseInt(e.target.value))} 
-                                placeholder="4" 
-                              />
-                            </div>
+                            <FormField
+                              control={form.control}
+                              name="tcp.port"
+                              render={({ field }) => (
+                                <FormItem className="space-y-1">
+                                  <FormLabel htmlFor="tcp-port">Port</FormLabel>
+                                  <FormControl>
+                                    <Input
+                                      id="tcp-port"
+                                      type="number"
+                                      placeholder="502"
+                                      {...field}
+                                      onChange={(e) => {
+                                        const value = parseInt(e.target.value)
+                                        field.onChange(value)
+                                        updateConfig(['protocols', 'modbus', 'tcp', 'port'], value)
+                                      }}
+                                    />
+                                  </FormControl>
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={form.control}
+                              name="tcp.max_connections"
+                              render={({ field }) => (
+                                <FormItem className="space-y-1">
+                                  <FormLabel htmlFor="tcp-max-users">Max Users</FormLabel>
+                                  <FormControl>
+                                    <Input
+                                      id="tcp-max-users"
+                                      type="number"
+                                      placeholder="4"
+                                      {...field}
+                                      onChange={(e) => {
+                                        const value = parseInt(e.target.value)
+                                        field.onChange(value)
+                                        updateConfig(['protocols', 'modbus', 'tcp', 'max_connections'], value)
+                                      }}
+                                    />
+                                  </FormControl>
+                                </FormItem>
+                              )}
+                            />
                           </div>
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <div className="space-y-1">
-                              <Label htmlFor="tcp-idle-time">Idle Time (s)</Label>
-                              <Input 
-                                id="tcp-idle-time" 
-                                type="number" 
-                                value={modbusTcpIdleTime} 
-                                onChange={(e) => setModbusTcpIdleTime(parseInt(e.target.value))} 
-                                placeholder="120" 
-                              />
-                            </div>
-                            <div className="flex items-center space-x-2 pt-6">
-                              <Checkbox 
-                                id="rtu-over-tcp" 
-                                checked={modbusRtuOverTcp} 
-                                onCheckedChange={(checked) => 
-                                  setModbusRtuOverTcp(checked === true)}
-                              />
-                              <Label htmlFor="rtu-over-tcp">RTU over TCP</Label>
-                            </div>
+                            <FormField
+                              control={form.control}
+                              name="tcp.timeout"
+                              render={({ field }) => (
+                                <FormItem className="space-y-1">
+                                  <FormLabel htmlFor="tcp-idle-time">Idle Time (s)</FormLabel>
+                                  <FormControl>
+                                    <Input
+                                      id="tcp-idle-time"
+                                      type="number"
+                                      placeholder="120"
+                                      {...field}
+                                      onChange={(e) => {
+                                        const value = parseInt(e.target.value)
+                                        field.onChange(value)
+                                        updateConfig(['protocols', 'modbus', 'tcp', 'timeout'], value)
+                                      }}
+                                    />
+                                  </FormControl>
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={form.control}
+                              name="tcp.rtu_over_tcp"
+                              render={({ field }) => (
+                                <FormItem className="flex items-center space-x-2 pt-6">
+                                   <FormControl>
+                                    <Checkbox
+                                      id="rtu-over-tcp"
+                                      checked={field.value}
+                                      onCheckedChange={(checked) => {
+                                        field.onChange(checked === true)
+                                        updateConfig(['protocols', 'modbus', 'tcp', 'rtu_over_tcp'], checked === true)
+                                      }}
+                                    />
+                                  </FormControl>
+                                  <FormLabel htmlFor="rtu-over-tcp">RTU over TCP</FormLabel>
+                                </FormItem>
+                              )}
+                            />
                           </div>
                         </div>
                       )}
                     </CardContent>
                   </Card>
+                </TabsContent>
 
-                  {/* Modbus RTU Settings */}
+                <TabsContent value="rtu" className="space-y-4">
                   <Card>
                     <CardHeader className="pb-2">
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                         <CardTitle className="text-base">Modbus RTU Settings</CardTitle>
-                        <div className="flex items-center space-x-2">
-                          <span className="text-xs">Enable</span>
-                          <Switch 
-                            checked={modbusRtuEnabled} 
-                            onCheckedChange={setModbusRtuEnabled} 
-                          />
-                        </div>
+                        <FormField
+                          control={form.control}
+                          name="serial.enabled"
+                          render={({ field }) => (
+                            <FormItem className="flex items-center space-x-2">
+                              <FormLabel className="text-xs">Enable</FormLabel>
+                              <FormControl>
+                                <Switch
+                                  checked={field.value}
+                                  onCheckedChange={(value) => {
+                                    field.onChange(value)
+                                    updateConfig(['protocols', 'modbus', 'serial', 'enabled'], value)
+                                  }}
+                                />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
                       </div>
                     </CardHeader>
                     <CardContent>
-                      {modbusRtuEnabled && (
+                      {form.watch("serial.enabled") && (
                         <div className="space-y-3">
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <div className="space-y-1">
-                              <Label htmlFor="rtu-port">Port</Label>
-                              <Select 
-                                value={modbusRtuPort} 
-                                onValueChange={setModbusRtuPort}
-                              >
-                                <SelectTrigger id="rtu-port">
-                                  <SelectValue placeholder="Select port" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="COM1">COM1</SelectItem>
-                                  <SelectItem value="COM2">COM2</SelectItem>
-                                  <SelectItem value="COM3">COM3</SelectItem>
-                                  <SelectItem value="COM4">COM4</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div className="space-y-1">
-                              <Label htmlFor="rtu-baud-rate">Baud Rate</Label>
-                              <Select 
-                                value={modbusRtuBaudRate.toString()} 
-                                onValueChange={(value) => setModbusRtuBaudRate(parseInt(value))}
-                              >
-                                <SelectTrigger id="rtu-baud-rate">
-                                  <SelectValue placeholder="Select baud rate" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="9600">9600</SelectItem>
-                                  <SelectItem value="19200">19200</SelectItem>
-                                  <SelectItem value="38400">38400</SelectItem>
-                                  <SelectItem value="57600">57600</SelectItem>
-                                  <SelectItem value="115200">115200</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
+                            <FormField
+                              control={form.control}
+                              name="serial.port"
+                              render={({ field }) => (
+                                <FormItem className="space-y-1">
+                                  <FormLabel htmlFor="rtu-port">Port</FormLabel>
+                                  <Select
+                                    onValueChange={(value) => {
+                                      field.onChange(value)
+                                      updateConfig(['protocols', 'modbus', 'serial', 'port'], value)
+                                    }}
+                                    defaultValue={field.value}
+                                  >
+                                    <FormControl>
+                                      <SelectTrigger id="rtu-port">
+                                        <SelectValue placeholder="Select port" />
+                                      </SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                      <SelectItem value="COM1">COM1</SelectItem>
+                                      <SelectItem value="COM2">COM2</SelectItem>
+                                      <SelectItem value="COM3">COM3</SelectItem>
+                                      <SelectItem value="COM4">COM4</SelectItem>
+                                      <SelectItem value="/dev/ttyUSB0">/dev/ttyUSB0</SelectItem>
+                                      <SelectItem value="/dev/ttyS0">/dev/ttyS0</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={form.control}
+                              name="serial.baudrate"
+                              render={({ field }) => (
+                                <FormItem className="space-y-1">
+                                  <FormLabel htmlFor="rtu-baud-rate">Baud Rate</FormLabel>
+                                  <Select
+                                    onValueChange={(value) => {
+                                      const numValue = parseInt(value)
+                                      field.onChange(numValue)
+                                      updateConfig(['protocols', 'modbus', 'serial', 'baudrate'], numValue)
+                                    }}
+                                    defaultValue={field.value?.toString()}
+                                  >
+                                    <FormControl>
+                                      <SelectTrigger id="rtu-baud-rate">
+                                        <SelectValue placeholder="Select baud rate" />
+                                      </SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                      <SelectItem value="9600">9600</SelectItem>
+                                      <SelectItem value="19200">19200</SelectItem>
+                                      <SelectItem value="38400">38400</SelectItem>
+                                      <SelectItem value="57600">57600</SelectItem>
+                                      <SelectItem value="115200">115200</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </FormItem>
+                              )}
+                            />
                           </div>
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                            <div className="space-y-1">
-                              <Label htmlFor="rtu-data-bit">Data Bits</Label>
-                              <Select 
-                                value={modbusRtuDataBit.toString()} 
-                                onValueChange={(value) => setModbusRtuDataBit(parseInt(value))}
-                              >
-                                <SelectTrigger id="rtu-data-bit">
-                                  <SelectValue placeholder="Data bits" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="7">7</SelectItem>
-                                  <SelectItem value="8">8</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div className="space-y-1">
-                              <Label htmlFor="rtu-stop-bit">Stop Bits</Label>
-                              <Select 
-                                value={modbusRtuStopBit.toString()} 
-                                onValueChange={(value) => setModbusRtuStopBit(parseInt(value))}
-                              >
-                                <SelectTrigger id="rtu-stop-bit">
-                                  <SelectValue placeholder="Stop bits" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="1">1</SelectItem>
-                                  <SelectItem value="2">2</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div className="space-y-1">
-                              <Label htmlFor="rtu-parity">Parity</Label>
-                              <Select 
-                                value={modbusRtuParity} 
-                                onValueChange={(value: "none" | "even" | "odd") => setModbusRtuParity(value)}
-                              >
-                                <SelectTrigger id="rtu-parity">
-                                  <SelectValue placeholder="Parity" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="none">None</SelectItem>
-                                  <SelectItem value="even">Even</SelectItem>
-                                  <SelectItem value="odd">Odd</SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
+                            <FormField
+                              control={form.control}
+                              name="serial.data_bits"
+                              render={({ field }) => (
+                                <FormItem className="space-y-1">
+                                  <FormLabel htmlFor="rtu-data-bit">Data Bits</FormLabel>
+                                  <Select
+                                    onValueChange={(value) => {
+                                      const numValue = parseInt(value)
+                                      field.onChange(numValue)
+                                      updateConfig(['protocols', 'modbus', 'serial', 'data_bits'], numValue)
+                                    }}
+                                    defaultValue={field.value?.toString()}
+                                  >
+                                    <FormControl>
+                                      <SelectTrigger id="rtu-data-bit">
+                                        <SelectValue placeholder="Data bits" />
+                                      </SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                      <SelectItem value="7">7</SelectItem>
+                                      <SelectItem value="8">8</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={form.control}
+                              name="serial.stop_bits"
+                              render={({ field }) => (
+                                <FormItem className="space-y-1">
+                                  <FormLabel htmlFor="rtu-stop-bit">Stop Bits</FormLabel>
+                                  <Select
+                                    onValueChange={(value) => {
+                                      const numValue = parseInt(value)
+                                      field.onChange(numValue)
+                                      updateConfig(['protocols', 'modbus', 'serial', 'stop_bits'], numValue)
+                                    }}
+                                    defaultValue={field.value?.toString()}
+                                  >
+                                    <FormControl>
+                                      <SelectTrigger id="rtu-stop-bit">
+                                        <SelectValue placeholder="Stop bits" />
+                                      </SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                      <SelectItem value="1">1</SelectItem>
+                                      <SelectItem value="2">2</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </FormItem>
+                              )}
+                            />
+                            <FormField
+                              control={form.control}
+                              name="serial.parity"
+                              render={({ field }) => (
+                                <FormItem className="space-y-1">
+                                  <FormLabel htmlFor="rtu-parity">Parity</FormLabel>
+                                  <Select
+                                    onValueChange={(value: "none" | "even" | "odd") => {
+                                      field.onChange(value)
+                                      updateConfig(['protocols', 'modbus', 'serial', 'parity'], value)
+                                    }}
+                                    defaultValue={field.value}
+                                  >
+                                    <FormControl>
+                                      <SelectTrigger id="rtu-parity">
+                                        <SelectValue placeholder="Parity" />
+                                      </SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                      <SelectItem value="none">None</SelectItem>
+                                      <SelectItem value="even">Even</SelectItem>
+                                      <SelectItem value="odd">Odd</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </FormItem>
+                              )}
+                            />
                           </div>
                         </div>
                       )}
                     </CardContent>
                   </Card>
-                </div>
-
+                </TabsContent>
+              </Tabs>
+              <div className="space-y-4"> {/* This div might be redundant now */}
                 {/* Tag Table */}
                 <Card>
                   <CardHeader className="pb-2">
@@ -978,9 +1122,9 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
                 <Button variant="outline" className="w-full sm:w-auto">
                   <Upload className="h-4 w-4 mr-1" /> Import
                 </Button>
-                <Button className="w-full sm:w-auto">
+                {/* <Button className="w-full sm:w-auto">
                   <Check className="h-4 w-4 mr-1" /> Apply Changes
-                </Button>
+                </Button> */}
               </div>
             </>
         )}
@@ -1242,129 +1386,300 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
                     {/* Modbus TCP Configuration (Left Side) */}
                     <div className="space-y-4">
                       <h3 className="text-sm font-medium">Modbus TCP Configuration</h3>
-                      <div className="space-y-1">
-                        <div className="flex items-center space-x-2">
-                          <Checkbox id="modbus-tcp-enabled" />
-                          <Label htmlFor="modbus-tcp-enabled">Modbus TCP</Label>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          Configure the system as a Modbus TCP server over Ethernet networks
-                        </p>
-                      </div>
+                      <FormField
+                        control={form.control}
+                        name="tcp.enabled"
+                        render={({ field }) => (
+                          <FormItem className="space-y-1">
+                            <div className="flex items-center space-x-2">
+                              <FormControl>
+                                <Checkbox
+                                  id="modbus-tcp-enabled"
+                                  checked={field.value}
+                                  onCheckedChange={(value) => {
+                                    field.onChange(value)
+                                    updateConfig(['protocols', 'modbus', 'tcp', 'enabled'], value)
+                                  }}
+                                />
+                              </FormControl>
+                              <FormLabel htmlFor="modbus-tcp-enabled">Modbus TCP</FormLabel>
+                            </div>
+                            <FormDescription className="text-xs text-muted-foreground">
+                              Configure the system as a Modbus TCP server over Ethernet networks
+                            </FormDescription>
+                          </FormItem>
+                        )}
+                      />
 
-                      <div className="space-y-4">
+                      {form.watch("tcp.enabled") && (<div className="space-y-4">
                         <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                            <Label htmlFor="tcp-port">Port Number</Label>
-                            <Input id="tcp-port" type="number" defaultValue="502" />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="tcp-max-users">Max Users</Label>
-                            <Input id="tcp-max-users" type="number" defaultValue="4" />
-                          </div>
+                          <FormField
+                            control={form.control}
+                            name="tcp.port"
+                            render={({ field }) => (
+                              <FormItem className="space-y-2">
+                                <FormLabel htmlFor="tcp-port">Port Number</FormLabel>
+                                <FormControl>
+                                  <Input
+                                    id="tcp-port"
+                                    type="number"
+                                    {...field}
+                                    onChange={(e) => {
+                                      const value = parseInt(e.target.value)
+                                      field.onChange(value)
+                                      updateConfig(['protocols', 'modbus', 'tcp', 'port'], value)
+                                    }}
+                                  />
+                                </FormControl>
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={form.control}
+                            name="tcp.max_connections"
+                            render={({ field }) => (
+                              <FormItem className="space-y-2">
+                                <FormLabel htmlFor="tcp-max-users">Max Users</FormLabel>
+                                <FormControl>
+                                  <Input
+                                    id="tcp-max-users"
+                                    type="number"
+                                    {...field}
+                                    onChange={(e) => {
+                                      const value = parseInt(e.target.value)
+                                      field.onChange(value)
+                                      updateConfig(['protocols', 'modbus', 'tcp', 'max_connections'], value)
+                                    }}
+                                  />
+                                </FormControl>
+                              </FormItem>
+                            )}
+                          />
                         </div>
                         
-                        <div className="space-y-2">
-                          <Label htmlFor="tcp-idle-time">Idle Time (s)</Label>
-                          <Input id="tcp-idle-time" type="number" defaultValue="120" />
-                        </div>
+                        <FormField
+                          control={form.control}
+                          name="tcp.timeout"
+                          render={({ field }) => (
+                            <FormItem className="space-y-2">
+                              <FormLabel htmlFor="tcp-idle-time">Idle Time (s)</FormLabel>
+                              <FormControl>
+                                <Input
+                                  id="tcp-idle-time"
+                                  type="number"
+                                  {...field}
+                                  onChange={(e) => {
+                                    const value = parseInt(e.target.value)
+                                    field.onChange(value)
+                                    updateConfig(['protocols', 'modbus', 'tcp', 'timeout'], value)
+                                  }}
+                                />
+                              </FormControl>
+                            </FormItem>
+                          )}
+                        />
                         
-                        <div className="flex items-center space-x-2 pt-2">
-                          <Checkbox id="modbus-rtu-over-tcp" />
-                          <Label htmlFor="modbus-rtu-over-tcp">Modbus RTU Over TCP</Label>
-                        </div>
-                      </div>
+                        <FormField
+                          control={form.control}
+                          name="tcp.rtu_over_tcp"
+                          render={({ field }) => (
+                            <FormItem className="flex items-center space-x-2 pt-2">
+                              <FormControl>
+                                <Checkbox
+                                  id="modbus-rtu-over-tcp"
+                                  checked={field.value}
+                                  onCheckedChange={(checked) => {
+                                    field.onChange(checked === true)
+                                    updateConfig(['protocols', 'modbus', 'tcp', 'rtu_over_tcp'], checked === true)
+                                  }}
+                                />
+                              </FormControl>
+                              <FormLabel htmlFor="modbus-rtu-over-tcp">Modbus RTU Over TCP</FormLabel>
+                            </FormItem>
+                          )}
+                        />
+                      </div>)}
                     </div>
 
                     {/* Modbus RTU Configuration (Right Side) */}
                     <div className="space-y-4">
                       <h3 className="text-sm font-medium">Modbus RTU Configuration</h3>
-                      <div className="space-y-1">
-                        <div className="flex items-center space-x-2">
-                          <Checkbox id="modbus-rtu-enabled" />
-                          <Label htmlFor="modbus-rtu-enabled">Modbus RTU</Label>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          Configure the system to communicate with Modbus devices over a serial interface
-                        </p>
-                      </div>
-
-                      <div className="space-y-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="rtu-port">Port</Label>
-                          <Select defaultValue="COM1">
-                            <SelectTrigger id="rtu-port">
-                              <SelectValue placeholder="Select port" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="COM1">COM1</SelectItem>
-                              <SelectItem value="COM2">COM2</SelectItem>
-                              <SelectItem value="COM3">COM3</SelectItem>
-                              <SelectItem value="COM4">COM4</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
+                      <FormField
+                        control={form.control}
+                        name="serial.enabled"
+                        render={({ field }) => (
+                          <FormItem className="space-y-1">
+                            <div className="flex items-center space-x-2">
+                              <FormControl>
+                                <Checkbox
+                                  id="modbus-rtu-enabled"
+                                  checked={field.value}
+                                  onCheckedChange={(value) => {
+                                    field.onChange(value)
+                                    updateConfig(['protocols', 'modbus', 'serial', 'enabled'], value)
+                                  }}
+                                />
+                              </FormControl>
+                              <FormLabel htmlFor="modbus-rtu-enabled">Modbus RTU</FormLabel>
+                            </div>
+                            <FormDescription className="text-xs text-muted-foreground">
+                              Configure the system to communicate with Modbus devices over a serial interface
+                            </FormDescription>
+                          </FormItem>
+                        )}
+                      />
+                      {form.watch("serial.enabled") && (<div className="space-y-4">
+                        <FormField
+                          control={form.control}
+                          name="serial.port"
+                          render={({ field }) => (
+                            <FormItem className="space-y-2">
+                              <FormLabel htmlFor="rtu-port">Port</FormLabel>
+                              <Select
+                                onValueChange={(value) => {
+                                  field.onChange(value)
+                                  updateConfig(['protocols', 'modbus', 'serial', 'port'], value)
+                                }}
+                                defaultValue={field.value}
+                              >
+                                <FormControl>
+                                  <SelectTrigger id="rtu-port">
+                                    <SelectValue placeholder="Select port" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="COM1">COM1</SelectItem>
+                                  <SelectItem value="COM2">COM2</SelectItem>
+                                  <SelectItem value="COM3">COM3</SelectItem>
+                                  <SelectItem value="COM4">COM4</SelectItem>
+                                  <SelectItem value="/dev/ttyUSB0">/dev/ttyUSB0</SelectItem>
+                                  <SelectItem value="/dev/ttyS0">/dev/ttyS0</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </FormItem>
+                          )}
+                        />
                         
-                        <div className="space-y-2">
-                          <Label htmlFor="rtu-baud-rate">Baud Rate</Label>
-                          <Select defaultValue="9600">
-                            <SelectTrigger id="rtu-baud-rate">
-                              <SelectValue placeholder="Select baud rate" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="1200">1200</SelectItem>
-                              <SelectItem value="2400">2400</SelectItem>
-                              <SelectItem value="4800">4800</SelectItem>
-                              <SelectItem value="9600">9600</SelectItem>
-                              <SelectItem value="19200">19200</SelectItem>
-                              <SelectItem value="38400">38400</SelectItem>
-                              <SelectItem value="57600">57600</SelectItem>
-                              <SelectItem value="115200">115200</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
+                        <FormField
+                          control={form.control}
+                          name="serial.baudrate"
+                          render={({ field }) => (
+                            <FormItem className="space-y-2">
+                              <FormLabel htmlFor="rtu-baud-rate">Baud Rate</FormLabel>
+                              <Select
+                                onValueChange={(value) => {
+                                  const numValue = parseInt(value)
+                                  field.onChange(numValue)
+                                  updateConfig(['protocols', 'modbus', 'serial', 'baudrate'], numValue)
+                                }}
+                                defaultValue={field.value?.toString()}
+                              >
+                                <FormControl>
+                                  <SelectTrigger id="rtu-baud-rate">
+                                    <SelectValue placeholder="Select baud rate" />
+                                  </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                  <SelectItem value="1200">1200</SelectItem>
+                                  <SelectItem value="2400">2400</SelectItem>
+                                  <SelectItem value="4800">4800</SelectItem>
+                                  <SelectItem value="9600">9600</SelectItem>
+                                  <SelectItem value="19200">19200</SelectItem>
+                                  <SelectItem value="38400">38400</SelectItem>
+                                  <SelectItem value="57600">57600</SelectItem>
+                                  <SelectItem value="115200">115200</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </FormItem>
+                          )}
+                        />
                         
                         <div className="grid grid-cols-3 gap-4">
-                          <div className="space-y-2">
-                            <Label htmlFor="rtu-data-bit">Data Bit</Label>
-                            <Select defaultValue="8">
-                              <SelectTrigger id="rtu-data-bit">
-                                <SelectValue placeholder="Data bit" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="7">7</SelectItem>
-                                <SelectItem value="8">8</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
+                          <FormField
+                            control={form.control}
+                            name="serial.data_bits"
+                            render={({ field }) => (
+                              <FormItem className="space-y-2">
+                                <FormLabel htmlFor="rtu-data-bit">Data Bit</FormLabel>
+                                <Select
+                                  onValueChange={(value) => {
+                                    const numValue = parseInt(value)
+                                    field.onChange(numValue)
+                                    updateConfig(['protocols', 'modbus', 'serial', 'data_bits'], numValue)
+                                  }}
+                                  defaultValue={field.value?.toString()}
+                                >
+                                  <FormControl>
+                                    <SelectTrigger id="rtu-data-bit">
+                                      <SelectValue placeholder="Data bit" />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    <SelectItem value="7">7</SelectItem>
+                                    <SelectItem value="8">8</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </FormItem>
+                            )}
+                          />
                           
-                          <div className="space-y-2">
-                            <Label htmlFor="rtu-stop-bit">Stop Bit</Label>
-                            <Select defaultValue="1">
-                              <SelectTrigger id="rtu-stop-bit">
-                                <SelectValue placeholder="Stop bit" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="1">1</SelectItem>
-                                <SelectItem value="2">2</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
+                          <FormField
+                            control={form.control}
+                            name="serial.stop_bits"
+                            render={({ field }) => (
+                              <FormItem className="space-y-2">
+                                <FormLabel htmlFor="rtu-stop-bit">Stop Bit</Label>
+                                <Select
+                                  onValueChange={(value) => {
+                                    const numValue = parseInt(value)
+                                    field.onChange(numValue)
+                                    updateConfig(['protocols', 'modbus', 'serial', 'stop_bits'], numValue)
+                                  }}
+                                  defaultValue={field.value?.toString()}
+                                >
+                                  <FormControl>
+                                    <SelectTrigger id="rtu-stop-bit">
+                                      <SelectValue placeholder="Stop bit" />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    <SelectItem value="1">1</SelectItem>
+                                    <SelectItem value="2">2</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </FormItem>
+                            )}
+                          />
                           
-                          <div className="space-y-2">
-                            <Label htmlFor="rtu-parity">Parity</Label>
-                            <Select defaultValue="none">
-                              <SelectTrigger id="rtu-parity">
-                                <SelectValue placeholder="Parity" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="none">None</SelectItem>
-                                <SelectItem value="even">Even</SelectItem>
-                                <SelectItem value="odd">Odd</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
+                          <FormField
+                            control={form.control}
+                            name="serial.parity"
+                            render={({ field }) => (
+                              <FormItem className="space-y-2">
+                                <FormLabel htmlFor="rtu-parity">Parity</FormLabel>
+                                <Select
+                                  onValueChange={(value: "none" | "even" | "odd") => {
+                                    field.onChange(value)
+                                    updateConfig(['protocols', 'modbus', 'serial', 'parity'], value)
+                                  }}
+                                  defaultValue={field.value}
+                                >
+                                  <FormControl>
+                                    <SelectTrigger id="rtu-parity">
+                                      <SelectValue placeholder="Parity" />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent>
+                                    <SelectItem value="none">None</SelectItem>
+                                    <SelectItem value="even">Even</SelectItem>
+                                    <SelectItem value="odd">Odd</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </FormItem>
+                            )}
+                          />
                         </div>
+                      </div>)}
                       </div>
                     </div>
                   </div>
@@ -1544,9 +1859,9 @@ export function ModbusForm({ separateAdvancedConfig = false }: ModbusFormProps) 
                     <Button variant="outline">
                       <Upload className="h-4 w-4 mr-1" /> Import
                     </Button>
-                    <Button>
+                    {/* <Button>
                       <Check className="h-4 w-4 mr-1" /> Apply Changes
-                    </Button>
+                    </Button> */}
                   </div>
                 </CardFooter>
               </Card>

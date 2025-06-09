@@ -162,6 +162,75 @@ interface FirewallConfig {
 interface NetworkConfig {
   interfaces: NetworkInterfaces;
   firewall: FirewallConfig;
+  dhcpServer?: DHCPServerConfig;
+  dynamicDns?: DynamicDNSConfig;
+  ipMacBindings?: IPMacBindingsConfig;
+  portForwarding?: PortForwardingConfig;
+  staticRoutes?: StaticRoutesConfig;
+}
+
+// --- DHCPServerConfig Definition ---
+interface DHCPServerConfig {
+  enabled: boolean;
+  startIP: string;
+  endIP: string;
+  leaseTime: number;
+  domain?: string;
+  dnsServers?: string;
+}
+
+// --- DynamicDNSConfig Definition ---
+type DynamicDNSProvider = "dyndns" | "noip" | "freedns" | "cloudflare";
+
+interface DynamicDNSConfig {
+  enabled: boolean;
+  provider: DynamicDNSProvider;
+  domain: string;
+  username: string;
+  password: string;
+  updateInterval: number;
+}
+
+// --- IP-MAC Binding Config Definition ---
+interface IPMacBindingEntry {
+  name?: string;
+  ipAddress: string;
+  macAddress: string;
+  interface?: string;
+}
+
+interface IPMacBindingsConfig {
+  enabled: boolean;
+  bindings: IPMacBindingEntry[];
+}
+
+// --- Port Forwarding Config Definition ---
+interface PortForwardingRule {
+  name?: string;
+  protocol: 'tcp' | 'udp' | 'both';
+  externalPort: string; // Can be a single port or a range like "80-90"
+  internalIp: string;
+  internalPort: string; // Can be a single port
+}
+
+interface PortForwardingConfig {
+  enabled: boolean;
+  rules: PortForwardingRule[];
+}
+
+// --- Static Routes Config Definition ---
+interface StaticRouteEntry {
+  name?: string;
+  destination: string;
+  netmask: string;
+  gateway: string;
+  interface: string;
+  metric?: number;
+}
+
+interface StaticRoutesConfig {
+  enabled: boolean;
+  routes: StaticRouteEntry[];
 }
 
 interface ModbusTCPConfig {
@@ -260,7 +329,7 @@ interface WatchdogConfig {
   enabled: boolean;
   timeout: number;
   action: string;
-  custom_command: string;
+  customCommand: string;
 }
 
 interface GPIOInput { id?: string; state?: boolean; }

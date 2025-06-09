@@ -59,6 +59,30 @@ export const defaultConfig: ConfigSchema = {
       enabled: true,
       default_policy: "drop",
       rules: []
+    },
+    dhcpServer: {
+      enabled: false,
+      startIP: "192.168.1.100",
+      endIP: "192.168.1.200",
+      leaseTime: 24,
+      domain: "local",
+      dnsServers: "8.8.8.8,8.8.4.4",
+    },
+    dynamicDns: {
+      enabled: false,
+      provider: "dyndns",
+      domain: "",
+      username: "",
+      password: "",
+      updateInterval: 60,
+    },
+    ipMacBindings: {
+      enabled: false,
+      bindings: [],
+    },
+    portForwarding: {
+      enabled: false,
+      rules: [],
     }
   },
   protocols: {
@@ -132,7 +156,7 @@ export const defaultConfig: ConfigSchema = {
       enabled: false,
       timeout: 30,
       action: "restart",
-      custom_command: ""
+      customCommand: ""
     },
     gpio: {
       inputs: [],
