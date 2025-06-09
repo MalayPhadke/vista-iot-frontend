@@ -9,6 +9,9 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/use-toast"
+import { useConfigStore } from '@/lib/stores/configuration-store'
+import type { IOPortConfig } from './io-tag-form'; // Assuming IOPortConfig is exported from there
+import type { IOTag } from './io-tag-detail'; // Import the definitive IOTag interface
 import { AlertCircle } from "lucide-react"
 
 export interface DeviceConfig {
@@ -23,7 +26,8 @@ export interface DeviceConfig {
   useAsciiProtocol: number
   packetDelay: number
   digitalBlockSize: number
-  analogBlockSize: number
+  analogBlockSize: number;
+  tags: IOTag[]; // Array to hold device tags
 }
 
 interface DeviceFormProps {
@@ -33,6 +37,7 @@ interface DeviceFormProps {
 }
 
 export function DeviceForm({ onSubmit, existingConfig, portId }: DeviceFormProps) {
+  const { updateConfig, getConfig } = useConfigStore();
   const [enabled, setEnabled] = useState(existingConfig?.enabled ?? true)
   const [name, setName] = useState(existingConfig?.name || "NewDevice")
   const [nameError, setNameError] = useState(true) // Start with error for default name
@@ -66,7 +71,7 @@ export function DeviceForm({ onSubmit, existingConfig, portId }: DeviceFormProps
       return
     }
 
-    const config: DeviceConfig = {
+    const newDeviceConfig: DeviceConfig = {
       id: existingConfig?.id || `device-${Date.now()}`,
       enabled,
       name,
@@ -78,11 +83,45 @@ export function DeviceForm({ onSubmit, existingConfig, portId }: DeviceFormProps
       useAsciiProtocol,
       packetDelay,
       digitalBlockSize,
-      analogBlockSize
+      analogBlockSize,
+      tags: existingConfig?.tags || [] // Initialize tags array
+    };
+
+    // Update the global configuration store
+    const currentGlobalConfig = getConfig();
+    const allPorts: IOPortConfig[] = currentGlobalConfig.io_setup?.ports || [];
+    
+    const targetPortIndex = allPorts.findIndex(p => p.id === portId);
+
+    if (targetPortIndex === -1) {
+      toast({
+        title: "Error",
+        description: `Port with ID ${portId} not found. Cannot save device.`,
+        variant: "destructive",
+      });
+      return;
     }
 
+    const targetPort = { ...allPorts[targetPortIndex] }; // Shallow copy the target port
+    let updatedDevices: DeviceConfig[];
+
+    if (existingConfig) {
+      // Editing an existing device
+      updatedDevices = targetPort.devices.map(d => d.id === newDeviceConfig.id ? newDeviceConfig : d);
+    } else {
+      // Adding a new device
+      updatedDevices = [...(targetPort.devices || []), newDeviceConfig];
+    }
+    targetPort.devices = updatedDevices;
+
+    const updatedAllPorts = [...allPorts];
+    updatedAllPorts[targetPortIndex] = targetPort;
+
+    updateConfig(['io_setup', 'ports'], updatedAllPorts);
+
+    // Call the local onSubmit if provided
     if (onSubmit) {
-      onSubmit(config)
+      onSubmit(newDeviceConfig);
     }
 
     toast({

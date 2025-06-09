@@ -11,6 +11,8 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/use-toast"
+import { useConfigStore } from '@/lib/stores/configuration-store';
+import type { DeviceConfig } from './device-form'; // Import consolidated types. IOTag is part of DeviceConfig.
 
 export interface SerialPortSettings {
   port: string
@@ -23,6 +25,7 @@ export interface SerialPortSettings {
   enabled: boolean
 }
 
+
 export interface IOPortConfig {
   id: string
   type: string
@@ -33,8 +36,9 @@ export interface IOPortConfig {
   retryCount: number
   autoRecoverTime: number
   scanMode: string
-  enabled: boolean
-  serialSettings?: SerialPortSettings
+  enabled: boolean;
+  serialSettings?: SerialPortSettings;
+  devices: DeviceConfig[];
 }
 
 interface IOPortFormProps {
@@ -43,6 +47,7 @@ interface IOPortFormProps {
 }
 
 export function IOPortForm({ onSubmit, existingConfig }: IOPortFormProps) {
+  const { updateConfig, getConfig } = useConfigStore();
   const [type, setType] = useState(existingConfig?.type || "")
   const [name, setName] = useState(existingConfig?.name || "")
   const [description, setDescription] = useState(existingConfig?.description || "")
@@ -86,8 +91,8 @@ export function IOPortForm({ onSubmit, existingConfig }: IOPortFormProps) {
       return
     }
 
-    let config: IOPortConfig = {
-      id: existingConfig?.id || `iotag-${Date.now()}`,
+    let newPortConfig: IOPortConfig = {
+      id: existingConfig?.id || `ioport-${Date.now()}`,
       type,
       name,
       description,
@@ -96,12 +101,13 @@ export function IOPortForm({ onSubmit, existingConfig }: IOPortFormProps) {
       retryCount,
       autoRecoverTime,
       scanMode,
-      enabled
-    }
+      enabled,
+      devices: existingConfig?.devices || [] // Initialize devices array
+    };
     
     // Add serial settings if it's a serial port type
     if (isSerialType) {
-      config.serialSettings = {
+      newPortConfig.serialSettings = {
         port: serialPort,
         baudRate,
         dataBit,
@@ -113,8 +119,23 @@ export function IOPortForm({ onSubmit, existingConfig }: IOPortFormProps) {
       }
     }
 
+    // Update the global configuration store
+    const currentConfig = getConfig();
+    const existingPorts: IOPortConfig[] = currentConfig.io_setup?.ports || [];
+    let updatedPorts: IOPortConfig[];
+
+    if (existingConfig) {
+      // Editing an existing port
+      updatedPorts = existingPorts.map(p => p.id === newPortConfig.id ? newPortConfig : p);
+    } else {
+      // Adding a new port
+      updatedPorts = [...existingPorts, newPortConfig];
+    }
+    updateConfig(['io_setup', 'ports'], updatedPorts);
+
+    // Call the local onSubmit if provided (e.g., for closing dialogs)
     if (onSubmit) {
-      onSubmit(config)
+      onSubmit(newPortConfig);
     }
 
     toast({

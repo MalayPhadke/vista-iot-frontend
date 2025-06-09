@@ -1,4 +1,6 @@
-export const defaultConfig = {
+import type { ConfigSchema } from '../stores/configuration-store';
+
+export const defaultConfig: ConfigSchema = {
   device: {
     name: "IoT-Gateway-001",
     model: "IoT-GW-5000",
@@ -169,5 +171,8 @@ export const defaultConfig = {
       retain: 7,
       location: "local"
     }
+  },
+  io_setup: {
+    ports: []
   }
 } 

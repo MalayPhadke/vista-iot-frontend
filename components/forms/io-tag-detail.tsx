@@ -53,6 +53,10 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { useToast } from "@/components/ui/use-toast"
+import { useConfigStore, type ConfigState } from '@/lib/stores/configuration-store';
+import type { IOPortConfig } from './io-tag-form';
+import type { DeviceConfig } from './device-form';
+// IOTag interface is defined and exported in this file, no need for self-import.
 
 const CONVERSION_OPTIONS = [
   { value: "UINT, Big Endian (ABCD)", defaultLength: 16 },
@@ -82,12 +86,11 @@ const CONVERSION_OPTIONS = [
   { value: "INT, Text to Number", defaultLength: 16 },
 ];
 
-// Define the IOTag interface
 export interface IOTag {
   id: string
   name: string
   dataType: string
-  registerType?: string // Added for register type
+  registerType?: string 
   address: string
   description: string
   source?: string
@@ -106,28 +109,34 @@ export interface IOTag {
   clampToLow?: boolean
   clampToHigh?: boolean
   clampToZero?: boolean
-  // New fields for Discrete type
   signalReversal?: boolean
   value0?: string
   value1?: string
 }
 
-interface Device {
-  id: string
-  name: string
-  type: string
-  enabled: boolean
-  tags: IOTag[]
-  [key: string]: any
-}
-
 interface IOTagDetailProps {
-  device: Device
+  device: DeviceConfig
   portId: string
   onUpdate?: (portId: string, deviceId: string, tags: IOTag[]) => void
 }
 
-export function IOTagDetailView({ device, portId, onUpdate }: IOTagDetailProps) {
+export function IOTagDetailView({ device: initialDeviceFromProps, portId, onUpdate }: IOTagDetailProps) {
+  const { getConfig, updateConfig } = useConfigStore();
+
+  const deviceToDisplay = useConfigStore((state: ConfigState) => {
+    // With ConfigSchema, state.config.io_setup.ports should be correctly typed as IOPortConfig[]
+    const port = state.config.io_setup?.ports?.find((p: IOPortConfig) => p.id === portId);
+    if (port && port.devices) {
+      const deviceInStore = port.devices.find((d: DeviceConfig) => d.id === initialDeviceFromProps.id);
+      if (deviceInStore) {
+        return deviceInStore;
+      }
+    }
+    return initialDeviceFromProps; // Fallback if port or device not found in store
+  });
+
+  const tagsToDisplay: IOTag[] = deviceToDisplay?.tags || [];
+
   const { toast } = useToast()
   
   // State for the table and selection
@@ -154,7 +163,7 @@ export function IOTagDetailView({ device, portId, onUpdate }: IOTagDetailProps) 
   const handleEditTag = () => {
     if (selectedTags.length !== 1) return
     
-    const tagToEdit = device.tags.find(tag => tag.id === selectedTags[0])
+    const tagToEdit = tagsToDisplay.find((tag: IOTag) => tag.id === selectedTags[0])
     if (tagToEdit) {
       setEditingTag(tagToEdit)
       setTagFormOpen(true)
@@ -162,24 +171,46 @@ export function IOTagDetailView({ device, portId, onUpdate }: IOTagDetailProps) 
   }
   
   const handleDeleteClick = () => {
-    if (selectedTags.length === 0) return
-    setDeleteConfirmOpen(true)
+    if (selectedTags.length === 0) return;
+    setDeleteConfirmOpen(true);
   }
-  
+
   const handleDeleteConfirm = () => {
-    const updatedTags = device.tags.filter(tag => !selectedTags.includes(tag.id))
-    
-    if (onUpdate) {
-      onUpdate(portId, device.id, updatedTags)
+    const updatedTagsForDevice = (tagsToDisplay || []).filter((tag: IOTag) => !selectedTags.includes(tag.id));
+
+    // Update global store
+    const allPortsFromStore: IOPortConfig[] = getConfig().io_setup?.ports || [];
+    const portIndex = allPortsFromStore.findIndex((p: IOPortConfig) => p.id === portId);
+
+    if (portIndex === -1) {
+      toast({ title: "Error", description: `Port ${portId} not found.`, variant: "destructive" });
+      setDeleteConfirmOpen(false);
+      return;
     }
-    
-    setSelectedTags([])
-    setDeleteConfirmOpen(false)
-    
+
+    const targetPort = { ...allPortsFromStore[portIndex] };
+    const deviceIndex = targetPort.devices.findIndex((d: DeviceConfig) => d.id === deviceToDisplay.id);
+
+    if (deviceIndex === -1) {
+      toast({ title: "Error", description: `Device ${deviceToDisplay.name} not found in port ${targetPort.name}.`, variant: "destructive" });
+      setDeleteConfirmOpen(false);
+      return;
+    }
+
+    const targetDevice = { ...targetPort.devices[deviceIndex] };
+    targetDevice.tags = updatedTagsForDevice;
+
+    targetPort.devices = targetPort.devices.map((d: DeviceConfig) => d.id === deviceToDisplay.id ? targetDevice : d);
+    const finalUpdatedPorts = allPortsFromStore.map((p: IOPortConfig) => p.id === portId ? targetPort : p);
+    updateConfig(['io_setup', 'ports'], finalUpdatedPorts);
+
+    setSelectedTags([]);
+    setDeleteConfirmOpen(false);
+
     toast({
       title: "IO Tags Deleted",
-      description: `Successfully deleted ${selectedTags.length} tag(s)`,
-    })
+      description: `${selectedTags.length} tag(s) have been deleted from ${deviceToDisplay.name}.`,
+    });
   }
   
   const handleSaveTag = (newTag: IOTag) => {
@@ -187,9 +218,9 @@ export function IOTagDetailView({ device, portId, onUpdate }: IOTagDetailProps) 
     
     if (editingTag) {
       // Update existing tag
-      updatedTags = device.tags.map(tag => 
+      updatedTags = (tagsToDisplay || []).map((tag: IOTag) => 
         tag.id === editingTag.id ? newTag : tag
-      )
+      );
       
       toast({
         title: "IO Tag Updated",
@@ -197,7 +228,7 @@ export function IOTagDetailView({ device, portId, onUpdate }: IOTagDetailProps) 
       })
     } else {
       // Add new tag
-      updatedTags = [...device.tags, newTag]
+      updatedTags = [...(tagsToDisplay || []), newTag];
       
       toast({
         title: "IO Tag Added",
@@ -205,10 +236,32 @@ export function IOTagDetailView({ device, portId, onUpdate }: IOTagDetailProps) 
       })
     }
     
-    if (onUpdate) {
-      onUpdate(portId, device.id, updatedTags)
+    // Update global store
+    const allPortsFromStore: IOPortConfig[] = getConfig().io_setup?.ports || [];
+    const portIndex = allPortsFromStore.findIndex((p: IOPortConfig) => p.id === portId);
+
+    if (portIndex === -1) {
+      toast({ title: "Error", description: `Port ${portId} not found.`, variant: "destructive" });
+      setTagFormOpen(false);
+      return;
     }
+
+    const targetPort = { ...allPortsFromStore[portIndex] };
+    const deviceIndex = targetPort.devices.findIndex((d: DeviceConfig) => d.id === deviceToDisplay.id);
+
+    if (deviceIndex === -1) {
+      toast({ title: "Error", description: `Device ${deviceToDisplay.name} not found in port ${targetPort.name}.`, variant: "destructive" });
+      setTagFormOpen(false);
+      return;
+    }
+
+    const targetDeviceToUpdate = { ...targetPort.devices[deviceIndex] };
+    targetDeviceToUpdate.tags = updatedTags; 
     
+    targetPort.devices = targetPort.devices.map((d: DeviceConfig) => d.id === deviceToDisplay.id ? targetDeviceToUpdate : d);
+    const finalUpdatedPorts = allPortsFromStore.map((p: IOPortConfig) => p.id === portId ? targetPort : p);
+    updateConfig(['io_setup', 'ports'], finalUpdatedPorts);
+
     setTagFormOpen(false)
     setEditingTag(null)
   }
@@ -218,7 +271,7 @@ export function IOTagDetailView({ device, portId, onUpdate }: IOTagDetailProps) 
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-bold flex items-center">
-            <Tags className="h-5 w-5 mr-2" /> IO Tags for {device.name}
+            <Tags className="h-5 w-5 mr-2" /> IO Tags for {deviceToDisplay.name}
           </h2>
           <p className="text-sm text-muted-foreground">
             Configure input/output tags for data acquisition and processing
@@ -264,14 +317,14 @@ export function IOTagDetailView({ device, portId, onUpdate }: IOTagDetailProps) 
               </TableRow>
             </TableHeader>
             <TableBody>
-              {device.tags.length === 0 ? (
+              {tagsToDisplay.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={11} className="text-center py-6 text-muted-foreground">
                     No IO tags configured for this device. Click "Add" to create a new tag.
                   </TableCell>
                 </TableRow>
               ) : (
-                device.tags.map(tag => (
+                tagsToDisplay.map((tag: IOTag) => (
                   <TableRow 
                     key={tag.id} 
                     className={selectedTags.includes(tag.id) ? "bg-muted/50" : ""}
@@ -330,7 +383,7 @@ export function IOTagDetailView({ device, portId, onUpdate }: IOTagDetailProps) 
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteConfirm}>Delete</AlertDialogAction>
+            <AlertDialogAction onClick={() => handleDeleteConfirm()}>Delete</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
